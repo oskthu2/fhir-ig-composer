@@ -1,0 +1,60 @@
+# Globala kompositionsregler för Ineras FHIR-miljö.
+#
+# Läses av komposition/verktyg/ig-compose.mjs. Varje regel kan överstyras
+# mer specifikt, och den mest specifika vinner:
+#   1. global regel (denna fil)
+#   2. IG-nivå: extension på ImplementationGuide i sushi-config.yaml
+#      (komponerar.inkludering)
+#   3. artefaktnivå: * insert Kompositionsanvisning(#exkludera) i FSH
+version: 1
+
+inkludering:
+  # Hur ett beroende tas med, utifrån beroendets extension publicering.
+  intern: kopiera
+  publik: referera
+
+kopiering:
+  # Källans canonical skrivs om till mottagarens (SUSHI sätter url utifrån
+  # mottagarens canonical; hårdkodade URL:er skrivs om textuellt).
+  kanoniskOmskrivning: true
+  # Varje kopierad definition får extension kopierad-fran = källa|version.
+  sparaUrsprung: true
+  # Exempel (Usage: #example) kopieras inte; tjänsten tar fram egna exempel
+  # som validerar mot tjänsteprofilerna.
+  exempel: hoppa-over
+  # RuleSets och alias kopieras även från refererade beroenden, eftersom
+  # FSH inte delar dem mellan paket.
+  ruleSetsAlltid: true
+
+federation:
+  # Generera <profilprefix><Resurstyp> för varje resurstyp som tjänsten
+  # exponerar, från federationens RuleSet (extension federationsmonster).
+  genereraMonsterprofiler: true
+  # Kopierade profiler som tjänsten exponerar oförändrade får federationens
+  # profil som ytterligare bas (Bas) vid kopieringen.
+  basPaKopieradeProfiler: true
+  # Lokala tjänsteprofiler måste själva deklarera federationens bas.
+  # fel | varning
+  basPaLokalaProfiler: fel
+  # En federation får bara begränsa dessa element. Det gör att multipelt
+  # arv aldrig kan krocka på ett kliniskt element.
+  tillatenYta: [meta, extension]
+
+lager:
+  # Vilka roller en IG med given roll får komponera.
+  byggblock:  [byggblock, konvention]
+  federation: [federation, konvention]
+  tjanst:     [byggblock, federation, konvention]
+  konvention: []
+  # En tjänst ligger i exakt en federation (en cell i matrisen).
+  federationerPerTjanst: 1
+
+aktorer:
+  # En lokal aktör i en tjänst måste (transitivt) härledas från minst en
+  # aktör i ett byggblock och en aktör i tjänstens federation.
+  tjanstaktorKraver: [byggblock, federation]
+  # Generera <Aktör>CS (CapabilityStatement, kind=requirements) som
+  # importerar förfädernas förmågor och listar tjänstens profiler.
+  genereraFormagor: true
+  # Generera <Aktör>Krav (Requirements) med derivedFrom till förfädernas krav.
+  genereraKrav: true

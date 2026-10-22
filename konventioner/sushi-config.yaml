@@ -1,0 +1,35 @@
+id: inera.build.conventions
+canonical: https://fhir.inera.se/ig/conventions
+name: IneraBuildConventions
+title: "Kompositionskonventioner för Ineras FHIR-IG:ar"
+description: "Extensions, kodsystem, RuleSets och globala regler som styr hur Ineras IG:ar komponeras av byggblock, federationer och tjänster."
+status: draft
+version: 0.1.0
+fhirVersion: 5.0.0
+copyrightYear: 2026+
+releaseLabel: ci-build
+license: CC0-1.0
+
+publisher:
+  name: Inera AB
+  url: https://www.inera.se
+
+jurisdiction: urn:iso:std:iso:3166#SE "Sweden"
+
+extension:
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/ig-roll
+    valueCode: konvention
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/publicering
+    valueCode: publik
+
+parameters:
+  usage-stats-opt-out: true
+  i18n-default-lang: sv
+
+pages:
+  index.md:
+    title: Hem
+
+menu:
+  Hem: index.html
+  Artefakter: artifacts.html

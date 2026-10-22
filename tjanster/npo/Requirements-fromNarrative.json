@@ -1,0 +1,10 @@
+{
+  "resourceType" : "Requirements",
+  "id" : "fromNarrative",
+  "url" : "https://fhir.inera.se/ig/npo/Requirements/fromNarrative",
+  "name" : "FromNarrative",
+  "title" : "Berättande konformansuttalanden",
+  "status" : "active",
+  "experimental" : false,
+  "description" : "Konformansuttalanden som hittas genom hela IG-berättelsen konsoliderade till denna beräkningsbara resurs för spårbarhetsändamål"
+}

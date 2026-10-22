@@ -1,0 +1,11 @@
+{
+  "name": "ig-compose",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Komponerar Ineras FHIR-IG:ar av byggblock, federationer och konventioner.",
+  "type": "module",
+  "bin": { "ig-compose": "ig-compose.mjs" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "yaml": "^2.5.0" },
+  "engines": { "node": ">=20" }
+}
