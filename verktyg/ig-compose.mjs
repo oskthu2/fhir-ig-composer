@@ -319,7 +319,7 @@ export function compose(ig, ws, rules) {
         if (a.capabilities !== csName) {
           fel.push(`Tjänsteaktören ${a.name} ska ha "* capabilities = Canonical(${csName})"; förmågorna genereras (regel aktorer.genereraFormagor)`);
         }
-        const ancCs = anc.map((x) => x.actor?.capabilities).filter((c) => capabilities.has(c));
+        const ancCs = [...new Set(anc.map((x) => x.actor?.capabilities).filter((c) => capabilities.has(c)))];
         const modes = [...new Set(ancCs.map((c) => capabilities.get(c).mode).filter(Boolean))];
         if (modes.length > 1) fel.push(`Förfäderna till ${a.name} har förmågor med olika rest.mode: ${modes.join(', ')}`);
         const types = [...new Set(ancCs.flatMap((c) => capabilities.get(c).types))];

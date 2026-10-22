@@ -81,10 +81,36 @@ test('lokal tjänsteprofil utan federationens bas ger fel', () => {
   }
 });
 
-test('matrisen placerar NPÖ i cellen SVOD × Patientöversikt', () => {
+test('matrisen placerar tjänsterna i rätt celler', () => {
   const { json } = matrix(ws);
-  assert.deepEqual(json.domaner, ['inera.bb.patientoversikt']);
-  assert.deepEqual(json.rader[0].celler[0].tjanster, ['inera.tjanst.npo']);
+  assert.deepEqual(json.domaner, ['inera.bb.patientoversikt', 'inera.bb.labbsvar']);
+  const cell = (fed, dom) => json.rader.find((r) => r.federation === fed).celler.find((c) => c.domän === dom).tjanster;
+  assert.deepEqual(cell('inera.fed.svod', 'inera.bb.patientoversikt'), ['inera.tjanst.npo']);
+  assert.deepEqual(cell('inera.fed.svod', 'inera.bb.labbsvar'), []);
+  assert.deepEqual(cell('inera.fed.individuell', 'inera.bb.patientoversikt'), ['inera.tjanst.journal1177']);
+  assert.deepEqual(cell('inera.fed.individuell', 'inera.bb.labbsvar'), ['inera.tjanst.journal1177']);
+});
+
+test('1177 Journal: två domäner, federationens bas på alla exponerade profiler', () => {
+  const r = compose(ws.get('inera.tjanst.journal1177'), loadWorkspace(root), rules);
+  assert.deepEqual(r.fel, []);
+  assert.deepEqual(r.exposed.map((p) => p.name).sort(), ['FastKontakt', 'Labbsvar', 'Vardkontakt']);
+  assert.ok(r.exposed.every((p) => p.origin.injiceradBas?.startsWith('IndividuellMetadata')));
+});
+
+test('1177 Journal: märkande och filtrerande källsystem får olika krav', () => {
+  const r = compose(ws.get('inera.tjanst.journal1177'), loadWorkspace(root), rules);
+  const k = (n) => r.kravprofiler.find((x) => x.aktor.name === n);
+  const keys = (n) => k(n).krav.flatMap((q) => q.statements.map((s) => s.key));
+  const security = (n) => k(n).element.filter((o) => o.element === 'meta.security');
+  assert.ok(keys('Journal1177KallsystemMarkande').includes('IND-M-1'));
+  assert.ok(!keys('Journal1177KallsystemMarkande').includes('IND-F-1'));
+  assert.ok(keys('Journal1177KallsystemFiltrerande').includes('IND-F-1'));
+  assert.equal(security('Journal1177KallsystemMarkande').length, 3);
+  assert.equal(security('Journal1177KallsystemFiltrerande').length, 0);
+  // Gemensam förfader importeras en gång.
+  assert.deepEqual(k('Journal1177KallsystemMarkande').formagor.imports,
+    ['PSProducentCS', 'FKProducentCS', 'LabProducentCS', 'IndividuellKallsystemCS']);
 });
 
 test('RuleSet-expansion ger sökvägar med kontext', () => {

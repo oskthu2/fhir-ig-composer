@@ -4,7 +4,14 @@ Prototyp för att komponera Ineras IG:ar av återanvändbara delar: **byggblock*
 
 Allt är FHIR R5. Arv uttrycks med FHIR:s egna mekanismer (`Parent`, `imposeProfile`, `ActorDefinition.derivedFrom`, `CapabilityStatement.imports`, `Requirements.derivedFrom`, obligations). Det som FHIR inte täcker – kopiering av interna byggblock, RuleSets och federationsmönster – sköts av verktyget `ig-compose` enligt globala regler och extensions på IG:ar och artefakter.
 
-Första tjänsten är **NPÖ** = SVOD × Patientöversikt.
+Tjänster i prototypen:
+
+| | Patientöversikt | Labbsvar |
+|---|---|---|
+| **SVOD** | NPÖ | *kandidat* |
+| **Individuell tillgång** | 1177 Journal | 1177 Journal |
+
+(`node verktyg/ig-compose.mjs matris` tar fram matrisen ur IG:arna.)
 
 ```
 komposition/
@@ -12,11 +19,14 @@ komposition/
 │   └── regler.yaml            globala kompositionsregler
 ├── byggblock/
 │   ├── fastakontakter/        inera.bb.fastakontakter  (byggblock, intern)
-│   └── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter
+│   ├── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter
+│   └── labbsvar/              inera.bb.labbsvar        (byggblock, intern)
 ├── federationer/
-│   └── svod/                  inera.fed.svod           (federation, intern)
+│   ├── svod/                  inera.fed.svod           (federation, intern)
+│   └── individuell/           inera.fed.individuell    (federation, intern)
 ├── tjanster/
-│   └── npo/                   inera.tjanst.npo         (tjänst, publik)   – Patientöversikt × SVOD
+│   ├── npo/                   inera.tjanst.npo         (tjänst, publik)   – SVOD × Patientöversikt
+│   └── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
 └── verktyg/                   ig-compose (Node ≥ 20)
 ```
 
@@ -107,6 +117,8 @@ Elementkrav per systemroll skrivs `* element insert Obligation(#SHALL:populate, 
 
 NPÖ har byggts med IG Publisher 3.0.1 (`-no-sushi` efter `komponera` → `sushi` → `efterbehandla`): **0 fel, 48 varningar**. 23 av varningarna är `kopierad-fran` som pekar på interna byggblock som inte publiceras, vilket är väntat. Resten är vanliga för Ineras IG:ar: HSA-OID:n saknar definition, kanoniska länkar i Requirements-narrativ, bindningar i bas-FHIR och OID för terminologi. Obligations i snapshoten för Vårdkontakt NPÖ blir de ärvda (PSProducent, PSKonsument) plus den egna (NPOKallsystem).
 
+1177 Journal: **0 fel, 62 varningar**, varav 32 är `kopierad-fran` mot interna byggblock. Resten är av samma slag som för NPÖ, plus IG Publishers rekommendation att labbsvar har `performer`.
+
 ## Utdata
 
 För varje komponerad IG (allt genereras och är git-ignorerat):
@@ -114,6 +126,18 @@ För varje komponerad IG (allt genereras och är git-ignorerat):
 - `input/fsh/_komponerat/` – kopierad FSH per källpaket och `_genererat.fsh` (federationsprofiler, förmågor, krav).
 - `input/pagecontent/komposition.md` – sidan *Komposition*: komponerade paket, exponerade profiler, **kravprofil per systemroll** (elementkrav längs arvskedja och baser, verksamhetskrav) och *vad kommer med var*.
 - `komposition.json` – samma sak maskinläsbart, underlag för visualisering.
+
+## NPÖ och 1177 Journal
+
+| | NPÖ | 1177 Journal |
+|---|---|---|
+| Federation | SVOD | Individuell tillgång |
+| Domäner | Patientöversikt (+ Fasta kontakter) | Patientöversikt (+ Fasta kontakter), Labbsvar |
+| Federationens krav per resurs | vårdenhet och vårdgivare (spärr), `meta.source` | säkerhetsetikett NOPAT i `meta.security` |
+| Egna profiler | Vårdkontakt NPÖ (kontaktuppgift 1..1) | inga – domänernas profiler exponeras oförändrade med federationens bas |
+| Tjänsteaktörer | källsystem, konsument | märkande källsystem, filtrerande källsystem, invånartjänst |
+
+Federationen Individuell tillgång låter källsystemet antingen *märka* information som inte får visas för invånaren eller *filtrera bort* den. Det är två systemroller i federationen, och därför två källsystemsroller i 1177 Journal. Det märkande källsystemets kravprofil får obligation på `meta.security` och kravet IND-M-1, medan det filtrerande källsystemets profil i stället får IND-F-1. Båda importerar samma förmågor.
 
 ## De två specialfallen
 
@@ -123,7 +147,7 @@ För varje komponerad IG (allt genereras och är git-ignorerat):
 ## Nästa steg
 
 - Dela upp i egna repon och lägg `ig-compose` som steg i `fhir-ig-workflows`.
-- 1177 Journal som andra tjänst: federationen Individuell tillgång × Patientöversikt (+ Lab).
+- Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera genererade `<Aktör>CS` som `TKAPISpecificationCapability` i tjänstekatalogen.
 - Interaktiv matrisvy från `komposition.json` som kan skriva tillbaka extensions som pull requests.
 - Regel för kandidater att lyfta: samma skärpning i flera tjänster → lyft till byggblocket.

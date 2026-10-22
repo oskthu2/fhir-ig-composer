@@ -1,0 +1,47 @@
+id: inera.bb.labbsvar
+canonical: https://fhir.inera.se/ig/labbsvar
+name: IneraByggblockLabbsvar
+title: "Byggblock: Labbsvar"
+description: "Domänbyggblock för laboratoriesvar: kliniska profiler, aktörer och förmågor. Publiceras inte som tjänst; tjänster som 1177 Journal komponerar det."
+status: draft
+version: 0.1.0
+fhirVersion: 5.0.0
+copyrightYear: 2026+
+releaseLabel: ci-build
+license: CC0-1.0
+
+publisher:
+  name: Inera AB
+  url: https://www.inera.se
+
+jurisdiction: urn:iso:std:iso:3166#SE "Sweden"
+
+dependencies:
+  inera.build.conventions: 0.1.0
+
+extension:
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/ig-roll
+    valueCode: byggblock
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/publicering
+    valueCode: intern
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
+    extension:
+      - url: paket
+        valueString: inera.build.conventions
+      - url: version
+        valueString: 0.1.0
+
+parameters:
+  usage-stats-opt-out: true
+  i18n-default-lang: sv
+
+pages:
+  index.md:
+    title: Hem
+  komposition.md:
+    title: Komposition
+
+menu:
+  Hem: index.html
+  Komposition: komposition.html
+  Artefakter: artifacts.html
