@@ -1,4 +1,4 @@
-# Genereras av ig-compose före varje bygge
+# Genereras av ig-composer före varje bygge
 input/fsh/_komponerat/
 **/input/fsh/_komponerat/
 **/input/pagecontent/komposition.md
@@ -15,6 +15,6 @@ input/fsh/_komponerat/
 # Verktyget
 verktyg/node_modules/
 
-# Matrisen genereras av ig-compose matris
+# Matrisen genereras av ig-composer matris
 matris.md
 matris.json

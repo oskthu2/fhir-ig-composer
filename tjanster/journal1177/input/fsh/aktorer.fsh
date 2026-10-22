@@ -1,7 +1,7 @@
 // Tjänsteaktörer: korsningen mellan domänernas och federationens aktörer.
 // Federationen har två varianter av källsystem (märkande och filtrerande),
 // så tjänsten har två källsystemsroller. Förmågorna (<Aktör>CS) och kraven
-// (<Aktör>Krav) genereras av ig-compose.
+// (<Aktör>Krav) genereras av ig-composer.
 Instance: Journal1177KallsystemMarkande
 InstanceOf: ActorDefinition
 Usage: #definition

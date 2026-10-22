@@ -1,6 +1,6 @@
 # Globala kompositionsregler för Ineras FHIR-miljö.
 #
-# Läses av komposition/verktyg/ig-compose.mjs. Varje regel kan överstyras
+# Läses av verktyg/ig-composer.mjs. Varje regel kan överstyras
 # mer specifikt, och den mest specifika vinner:
 #   1. global regel (denna fil)
 #   2. IG-nivå: extension på ImplementationGuide i sushi-config.yaml

@@ -2,7 +2,7 @@
 
 Tjänste-IG (`ig-roll = tjanst`, `publicering = publik`) för cellen **SVOD × Patientöversikt** i matrisen federation × domän.
 
-IG:n skrivs till största delen inte för hand. Den komponeras av verktyget `ig-compose` från:
+IG:n skrivs till största delen inte för hand. Den komponeras av verktyget `ig-composer` från:
 
 - byggblocket **Patientöversikt** (som komponerar **Fasta kontakter**) – kliniskt innehåll, kopieras in eftersom det är internt,
 - federationen **SVOD** – metadata för spärr, proveniens och stödtjänster, kopieras in,

@@ -2,7 +2,7 @@
 
 Tjänste-IG (`ig-roll = tjanst`, `publicering = publik`) för cellerna **Individuell tillgång × Patientöversikt** och **Individuell tillgång × Labbsvar** i matrisen federation × domän.
 
-IG:n komponeras av verktyget `ig-compose` från:
+IG:n komponeras av verktyget `ig-composer` från:
 
 - byggblocket **Patientöversikt** (som komponerar **Fasta kontakter**) och byggblocket **Labbsvar** – kliniskt innehåll, kopieras in eftersom det är internt,
 - federationen **Individuell tillgång** – märkning av information som inte får visas för invånaren, och stödtjänster, kopieras in,

@@ -6,7 +6,7 @@ Komposition av FHIR-IG:ar – prototyp.
 
 Prototyp för att komponera Ineras IG:ar av återanvändbara delar: **byggblock** (kliniskt innehåll), **federationer** (juridiskt utrymme, säkerhetsmetadata och stödtjänster) och **tjänster** (en cell i matrisen federation × domän). Kraven på ett system härleds från de **systemroller** (R5 `ActorDefinition`) som det antar.
 
-Allt är FHIR R5. Arv uttrycks med FHIR:s egna mekanismer (`Parent`, `imposeProfile`, `ActorDefinition.derivedFrom`, `CapabilityStatement.imports`, `Requirements.derivedFrom`, obligations). Det som FHIR inte täcker – kopiering av interna byggblock, RuleSets och federationsmönster – sköts av verktyget `ig-compose` enligt globala regler och extensions på IG:ar och artefakter.
+Allt är FHIR R5. Arv uttrycks med FHIR:s egna mekanismer (`Parent`, `imposeProfile`, `ActorDefinition.derivedFrom`, `CapabilityStatement.imports`, `Requirements.derivedFrom`, obligations). Det som FHIR inte täcker – kopiering av interna byggblock, RuleSets och federationsmönster – sköts av verktyget `ig-composer` enligt globala regler och extensions på IG:ar och artefakter.
 
 Tjänster i prototypen:
 
@@ -15,7 +15,7 @@ Tjänster i prototypen:
 | **SVOD** | NPÖ | *kandidat* |
 | **Individuell tillgång** | 1177 Journal | 1177 Journal |
 
-(`node verktyg/ig-compose.mjs matris` tar fram matrisen ur IG:arna.)
+(`node verktyg/ig-composer.mjs matris` tar fram matrisen ur IG:arna.)
 
 ```
 .
@@ -31,7 +31,7 @@ Tjänster i prototypen:
 ├── tjanster/
 │   ├── npo/                   inera.tjanst.npo         (tjänst, publik)   – SVOD × Patientöversikt
 │   └── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
-└── verktyg/                   ig-compose (Node ≥ 20)
+└── verktyg/                   ig-composer (Node ≥ 20)
 ```
 
 Varje katalog utom `verktyg/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon (skapade från `IneraFHIRTemplate`) som komponeras hit via arbetsytan.
@@ -45,17 +45,17 @@ CI (`.github/workflows/bygg.yml`) kör samma sak vid varje push och pull request
 ```sh
 npm install -g fsh-sushi
 cd verktyg && npm ci && cd ..
-node verktyg/ig-compose.mjs bygg          # alla IG:ar i beroendeordning
-node verktyg/ig-compose.mjs matris        # matris.md: federation × domän
+node verktyg/ig-composer.mjs bygg         # alla IG:ar i beroendeordning
+node verktyg/ig-composer.mjs matris       # matris.md: federation × domän
 cd verktyg && npm test                    # verktygets tester
 ```
 
 `bygg` gör för varje IG: `komponera` → `sushi build` → `efterbehandla`. Publika paket som andra IG:ar komponerar (konventionspaketet) byggs med `--snapshot` och installeras i den lokala FHIR-cachen så att de kan refereras. En enskild IG byggs fullt ut så här:
 
 ```sh
-node verktyg/ig-compose.mjs komponera tjanster/npo
+node verktyg/ig-composer.mjs komponera tjanster/npo
 (cd tjanster/npo && sushi build .)
-node verktyg/ig-compose.mjs efterbehandla tjanster/npo
+node verktyg/ig-composer.mjs efterbehandla tjanster/npo
 (cd tjanster/npo && java -jar publisher.jar -ig . -no-sushi)
 ```
 
@@ -118,7 +118,7 @@ Begränsning i dag: med `imposeProfile` ärvs inte tilläggsbasens slice-namn, s
 
 Elementkrav per systemroll skrivs `* element insert Obligation(#SHALL:populate, Aktor)`. Två saker i dagens verktygskedja kräver hantering:
 
-- **SUSHI:s mjuka index** (`[+]`) räknar inte med obligations som elementet ärver. En obligation i en härledd profil skriver då över den ärvda, och differentialen får med ärvda obligations som IG Publisher sedan dubblerar. `ig-compose efterbehandla` reducerar därför varje differential till profilens egna obligations efter SUSHI. (`Bas` har inte problemet; den adresserar `imposeProfile` via alias.)
+- **SUSHI:s mjuka index** (`[+]`) räknar inte med obligations som elementet ärver. En obligation i en härledd profil skriver då över den ärvda, och differentialen får med ärvda obligations som IG Publisher sedan dubblerar. `ig-composer efterbehandla` reducerar därför varje differential till profilens egna obligations efter SUSHI. (`Bas` har inte problemet; den adresserar `imposeProfile` via alias.)
 - **Ärvda metadata-extensions.** SUSHI och IG Publisher kopierar profilnivåns extensions till härledda profiler. `kopierad-fran` och `kompositionsanvisning` gäller bara artefakten själv. Extension-definitionerna har därför `snapshot-behavior = ignore` (läses av IG Publisher), och efterbehandlingen tar bort dem ur SUSHI:s utdata.
 
 ## Validering
@@ -154,7 +154,7 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 
 ## Nästa steg
 
-- Dela upp i egna repon och lägg `ig-compose` som steg i `fhir-ig-workflows`.
+- Dela upp i egna repon och lägg `ig-composer` som steg i `fhir-ig-workflows`.
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera genererade `<Aktör>CS` som `TKAPISpecificationCapability` i tjänstekatalogen.
 - Interaktiv matrisvy från `komposition.json` som kan skriva tillbaka extensions som pull requests.

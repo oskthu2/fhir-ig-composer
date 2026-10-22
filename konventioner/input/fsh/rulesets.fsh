@@ -16,7 +16,7 @@ RuleSet: Bas(profil)
 //   * period insert Obligation(#SHALL:populate, PSProducent)
 // Verktyget läser dessa för att härleda kravprofilen per systemroll.
 // SUSHI:s [+] räknar inte med obligations som elementet ärver; det rättas
-// av "ig-compose efterbehandla" efter SUSHI. (Alias-adressering fungerar
+// av "ig-composer efterbehandla" efter SUSHI. (Alias-adressering fungerar
 // inte här: SUSHI slår då ihop obligationen med den ärvda.)
 RuleSet: Obligation(kod, aktor)
 * ^extension[+].url = "http://hl7.org/fhir/StructureDefinition/obligation"

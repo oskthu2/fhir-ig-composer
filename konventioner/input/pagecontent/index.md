@@ -1,6 +1,6 @@
 ### Kompositionskonventioner
 
-Detta paket definierar hur Ineras IG:ar komponeras av återanvändbara delar. Det är en förutsättning för verktyget `ig-compose` och refereras av alla IG:ar som komponeras.
+Detta paket definierar hur Ineras IG:ar komponeras av återanvändbara delar. Det är en förutsättning för verktyget `ig-composer` och refereras av alla IG:ar som komponeras.
 
 #### Roller
 

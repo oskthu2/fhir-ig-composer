@@ -1,5 +1,5 @@
 // Tjänsteaktörer: korsningen mellan domänens och federationens aktörer.
-// Förmågorna (<Aktör>CS) och kraven (<Aktör>Krav) genereras av ig-compose.
+// Förmågorna (<Aktör>CS) och kraven (<Aktör>Krav) genereras av ig-composer.
 Instance: NPOKallsystem
 InstanceOf: ActorDefinition
 Usage: #definition

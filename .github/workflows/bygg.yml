@@ -29,9 +29,9 @@ jobs:
         run: npm test --prefix verktyg
 
       - name: Komponera och bygg alla IG:ar
-        run: node verktyg/ig-compose.mjs bygg
+        run: node verktyg/ig-composer.mjs bygg
 
       - name: Matris federation × domän
         run: |
-          node verktyg/ig-compose.mjs matris
+          node verktyg/ig-composer.mjs matris
           cat matris.md >> "$GITHUB_STEP_SUMMARY"

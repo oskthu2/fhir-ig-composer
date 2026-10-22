@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
-import { loadWorkspace, compose, matrix, postProcess } from './ig-compose.mjs';
+import { loadWorkspace, compose, matrix, postProcess } from './ig-composer.mjs';
 import { parseFsh, expandRules } from './fsh.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -124,7 +124,7 @@ test('RuleSet-expansion ger sökvägar med kontext', () => {
 });
 
 test('efterbehandlingen tar bort ärvda obligations ur differentialen', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ig-compose-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ig-composer-'));
   const res = path.join(dir, 'fsh-generated', 'resources');
   fs.mkdirSync(res, { recursive: true });
   const ob = (code, actor) => ({

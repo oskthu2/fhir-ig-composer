@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// ig-compose – komponerar Ineras FHIR-IG:ar av byggblock, federationer och
+// ig-composer – komponerar Ineras FHIR-IG:ar av byggblock, federationer och
 // konventioner, styrt av globala regler (konventioner/regler.yaml) och
 // extensions på IG:ar och artefakter. Körs före SUSHI.
 //
-//   ig-compose komponera <ig-katalog>     komponera en IG (före SUSHI)
-//   ig-compose efterbehandla <ig-katalog> rätta SUSHI-resultatet (efter SUSHI)
-//   ig-compose bygg                        allt ovan + SUSHI för alla IG:ar
-//   ig-compose installera <ig-katalog>    lägg SUSHI-resultatet i lokal FHIR-cache
-//   ig-compose matris                      skriv matrisen federation × domän
+//   ig-composer komponera <ig-katalog>      komponera en IG (före SUSHI)
+//   ig-composer efterbehandla <ig-katalog>  rätta SUSHI-resultatet (efter SUSHI)
+//   ig-composer bygg                        allt ovan + SUSHI för alla IG:ar
+//   ig-composer installera <ig-katalog>     lägg SUSHI-resultatet i lokal FHIR-cache
+//   ig-composer matris                      skriv matrisen federation × domän
 //
 // IG Publisher körs därefter med -no-sushi, så att efterbehandlingen står kvar.
 //
@@ -257,7 +257,7 @@ export function compose(ig, ws, rules) {
           `Parent: ${type}`,
           `Id: ${kebab(profilprefix)}-${type.toLowerCase()}`,
           `Title: "${profilprefix}: ${type}"`,
-          `Description: "Genererad av ig-compose från federationsmönstret ${ruleset} i ${fed.id}#${fed.version}. Ytterligare bas (Bas) för tjänstens profiler av typen ${type}."`,
+          `Description: "Genererad av ig-composer från federationsmönstret ${ruleset} i ${fed.id}#${fed.version}. Ytterligare bas (Bas) för tjänstens profiler av typen ${type}."`,
           '* ^status = #draft',
           `* insert ${ruleset}`,
         ].join('\n');
@@ -336,7 +336,7 @@ export function compose(ig, ws, rules) {
           'InstanceOf: CapabilityStatement',
           'Usage: #definition',
           `Title: "Förmågor: ${a.title}"`,
-          `Description: "Genererad av ig-compose. Importerar förmågorna hos aktörens förfäder och anger tjänstens profiler."`,
+          `Description: "Genererad av ig-composer. Importerar förmågorna hos aktörens förfäder och anger tjänstens profiler."`,
           `* name = "${csName}"`,
           `* title = "Förmågor: ${a.title}"`,
           '* status = #draft',
@@ -363,7 +363,7 @@ export function compose(ig, ws, rules) {
             'InstanceOf: Requirements',
             'Usage: #definition',
             `Title: "Krav: ${a.title}"`,
-            `Description: "Genererad av ig-compose. Härleds från kraven på aktörens förfäder."`,
+            `Description: "Genererad av ig-composer. Härleds från kraven på aktörens förfäder."`,
             `* name = "${a.name}Krav"`,
             `* title = "Krav: ${a.title}"`,
             '* status = #draft',
@@ -481,7 +481,7 @@ export function writeOutputs(result) {
   const outDir = path.join(ig.dir, OUT_FSH);
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
-  const header = (what) => `// Genererad av ig-compose – ändra inte för hand.\n// ${what}\n\n`;
+  const header = (what) => `// Genererad av ig-composer – ändra inte för hand.\n// ${what}\n\n`;
 
   const byPackage = new Map();
   for (const e of result.copied.filter((x) => x.kind !== 'Alias')) {
@@ -512,8 +512,8 @@ const code = (s) => `\`${String(s).replace(/\|/g, '\\|')}\``;
 
 function renderPage(r) {
   const out = [];
-  out.push('<!-- Genererad av ig-compose – ändra inte för hand. -->');
-  out.push('', `Denna sida genereras av verktyget \`ig-compose\` före varje bygge. Den visar vad som kommer med i ${r.ig.title} och varifrån, och den härledda kravprofilen för varje systemroll som IG:n definierar.`);
+  out.push('<!-- Genererad av ig-composer – ändra inte för hand. -->');
+  out.push('', `Denna sida genereras av verktyget \`ig-composer\` före varje bygge. Den visar vad som kommer med i ${r.ig.title} och varifrån, och den härledda kravprofilen för varje systemroll som IG:n definierar.`);
 
   out.push('', '### Komponerade paket', '', '| Paket | Version | Roll | Publicering | Inkludering | Via |', '|---|---|---|---|---|---|');
   for (const p of r.plan) {
@@ -633,7 +633,7 @@ export function matrix(ws) {
     })),
   }));
   const md = [
-    '<!-- Genererad av ig-compose matris – ändra inte för hand. -->',
+    '<!-- Genererad av ig-composer matris – ändra inte för hand. -->',
     '# Matris: federation × domän', '',
     `| Federation | ${domaner.map((d) => ws.get(d).title).join(' | ')} |`,
     `|---|${domaner.map(() => '---').join('|')}|`,
@@ -828,7 +828,7 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-compose komponera|efterbehandla|installera <ig-katalog> | bygg | matris [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 
@@ -836,7 +836,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   try {
     process.exitCode = main(process.argv);
   } catch (err) {
-    console.error(`ig-compose: ${err.message}`);
+    console.error(`ig-composer: ${err.message}`);
     process.exitCode = 2;
   }
 }
