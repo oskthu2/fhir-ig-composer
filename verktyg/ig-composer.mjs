@@ -19,6 +19,14 @@
 //                                           (miljoer/<miljö>.yaml); skriver federation-<miljö>.json
 //                                           och rapport/federation-<miljö>.md
 //   ig-composer federation starta [--port N] starta den mockade federationen och låt den köra
+//   ig-composer register publicera|lista [--server URL]
+//                                           publicera IG:arnas definitioner i ett FHIR-register (HAPI R5,
+//                                           standard FHIR_REGISTER eller http://localhost:8080/fhir)
+//   ig-composer mermaid <fil|url> [--server URL] [--rubrik]
+//                                           sekvensdiagram ur ett ExampleScenario (fil eller kanonisk
+//                                           URL i registret)
+//   ig-composer studio [--port N]           lokal server: vyn med redigering av system, användningsfall
+//                                           och komposition
 //   ig-composer externa hamta [--mot <miljö>] hämta de externa specifikationerna (basic auth
 //                                           från INFOPEAK_ANVANDARE/INFOPEAK_LOSENORD)
 //
@@ -38,6 +46,9 @@ import {
 import { composeScenarios } from './scenario.mjs';
 import { loadSystems, analyseSystem, renderReport } from './system.mjs';
 import { byggFederation, testaFederation, korFederation, renderFederationReport } from './federation.mjs';
+import { anvandningsfallSida, mermaidFranScenario } from './mermaid.mjs';
+import { startaStudio } from './studio.mjs';
+import { registerUrl, publiceraRegister, listaRegister, scenarioFranRegister } from './register.mjs';
 import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
@@ -882,6 +893,29 @@ export function analyseSystems(ws, root, manifest = loadManifests(ws)) {
   return loadSystems(root).map((sys) => analyseSystem(sys, manifest, root, regler));
 }
 
+// Komponerar alla IG:ar i byggordning, utan SUSHI (studions snabba varv).
+export function komponeraAlla(ws) {
+  const rules = loadRules(ws);
+  return buildOrder(ws).filter((ig) => ig.komponerar.length).map((ig) => {
+    const r = compose(ig, ws, rules);
+    writeOutputs(r);
+    return { ig: ig.id, fel: r.fel, varningar: r.varningar };
+  });
+}
+
+// Sekvensdiagram per IG och ExampleScenario, ur SUSHI:s utdata.
+function mermaidPerIg(ws) {
+  const ut = {};
+  for (const ig of ws.values()) {
+    const dir = path.join(ig.dir, 'fsh-generated', 'resources');
+    if (!fs.existsSync(dir)) continue;
+    const alla = fs.readdirSync(dir).filter((f) => f.startsWith('ExampleScenario-') && f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+    const resolver = (u) => alla.find((x) => x.url === u.split('|')[0]) || null;
+    if (alla.length) ut[ig.id] = Object.fromEntries(alla.map((es) => [es.name, mermaidFranScenario(es, { resolver })]));
+  }
+  return ut;
+}
+
 export function viewData(ws, root) {
   const manifest = loadManifests(ws);
   return {
@@ -892,6 +926,7 @@ export function viewData(ws, root) {
     })),
     matris: matrix(ws).json,
     manifest,
+    mermaid: mermaidPerIg(ws),
     system: analyseSystems(ws, root, manifest),
     federation: fs.existsSync(path.join(root, 'federation.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'federation.json'), 'utf8')) : null,
     // Körningar mot verkliga T2-realiseringar (federation testa --mot <miljö>).
@@ -924,6 +959,44 @@ const NOT_INHERITED = new Set([EXT + 'kopierad-fran', EXT + 'kompositionsanvisni
 // 2. SUSHI ärver profilnivåns extensions, så en lokal profil med en kopierad
 // parent skulle annars se kopierad ut. Sådana extensions tas bort.
 const OBLIGATION = 'http://hl7.org/fhir/StructureDefinition/obligation';
+
+// Sidan Användningsfall: ett sekvensdiagram per användningsfall, genererat ur
+// IG:ns ExampleScenario-resurser efter SUSHI. Sidan och menyvalet läggs till i
+// SUSHI:s ImplementationGuide och meny. Returnerar antalet diagram.
+export function flodessida(igDir) {
+  const res = path.join(igDir, 'fsh-generated', 'resources');
+  if (!fs.existsSync(res)) return 0;
+  const scenarier = fs.readdirSync(res).filter((f) => f.startsWith('ExampleScenario-') && f.endsWith('.json'))
+    .map((f) => JSON.parse(fs.readFileSync(path.join(res, f), 'utf8')));
+  if (!scenarier.length) return 0;
+  // Användningsfall, inte delflöden: enligt manifestet, annars de som inget annat pekar på.
+  const manifestFil = path.join(igDir, OUT_MANIFEST);
+  const manifest = fs.existsSync(manifestFil) ? JSON.parse(fs.readFileSync(manifestFil, 'utf8')) : null;
+  const typ = new Map((manifest?.anvandningsfall || []).map((u) => [u.namn, u]));
+  const anropade = new Set(scenarier.flatMap((es) => JSON.stringify(es).match(/"workflow":"[^"]+"/g) || []).map((w) => w.slice(12, -1).split('|')[0]));
+  const valda = scenarier.filter((es) => (typ.size ? typ.get(es.name)?.typ === 'anvandningsfall' && !typ.get(es.name)?.endastInkluderad : !anropade.has(es.url)))
+    .sort((a, b) => Number(!!typ.get(a.name)?.forutsattning) - Number(!!typ.get(b.name)?.forutsattning) || a.name.localeCompare(b.name));
+  if (!valda.length) return 0;
+  const resolver = (url) => scenarier.find((x) => x.url === url.split('|')[0]) || null;
+  fs.writeFileSync(path.join(igDir, 'input', 'pagecontent', 'anvandningsfall.md'), anvandningsfallSida(valda, resolver));
+  const igFil = fs.readdirSync(res).find((f) => f.startsWith('ImplementationGuide-'));
+  if (igFil) {
+    const igJson = JSON.parse(fs.readFileSync(path.join(res, igFil), 'utf8'));
+    const sidor = igJson.definition.page.page ||= [];
+    if (!sidor.some((p) => p.name === 'anvandningsfall.html')) {
+      sidor.splice(1, 0, { sourceUrl: 'anvandningsfall.html', name: 'anvandningsfall.html', title: 'Användningsfall', generation: 'markdown' });
+      fs.writeFileSync(path.join(res, igFil), JSON.stringify(igJson, null, 2) + '\n');
+    }
+  }
+  const meny = path.join(igDir, 'fsh-generated', 'includes', 'menu.xml');
+  if (fs.existsSync(meny)) {
+    const xml = fs.readFileSync(meny, 'utf8');
+    if (!xml.includes('anvandningsfall.html')) {
+      fs.writeFileSync(meny, xml.replace(/(\s*<li>\s*<a href="artifacts\.html">)/, '\n  <li>\n    <a href="anvandningsfall.html">Användningsfall</a>\n  </li>$1'));
+    }
+  }
+  return valda.length;
+}
 
 export function postProcess(igDir) {
   const res = path.join(igDir, 'fsh-generated', 'resources');
@@ -1062,7 +1135,7 @@ function main(argv) {
     return result.fel.length ? 1 : 0;
   }
   if (cmd === 'efterbehandla') {
-    console.log(`Efterbehandling: ${postProcess(path.resolve(target || '.'))} rättelser`);
+    console.log(`Efterbehandling: ${postProcess(path.resolve(target || '.'))} rättelser, ${flodessida(path.resolve(target || '.'))} flödesdiagram`);
     return 0;
   }
   if (cmd === 'installera') {
@@ -1093,6 +1166,48 @@ function main(argv) {
   }
   const motFlagga = args.indexOf('--mot');
   const mot = motFlagga >= 0 ? args[motFlagga + 1] : null;
+  const serverFlagga = args.indexOf('--server');
+  const server = registerUrl(serverFlagga >= 0 ? args[serverFlagga + 1] : null);
+  if (cmd === 'studio') {
+    const portFlagga = args.indexOf('--port');
+    const port = portFlagga >= 0 ? Number(args[portFlagga + 1]) : Number(process.env.STUDIO_PORT || 4900);
+    const vard = process.env.STUDIO_VARD || '127.0.0.1';
+    const bygg = () => {
+      const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), 'bygg', '--arbetsyta', root], { encoding: 'utf8' });
+      return { status: r.status, logg: `${r.stdout}${r.stderr}`.split('\n').slice(-60).join('\n') };
+    };
+    return startaStudio({ root, port, vard, verktyg: { loadWorkspace, viewData, renderView, komponeraAlla, bygg } }).then(() => {
+      console.log(`Studio på http://${vard === '0.0.0.0' ? 'localhost' : vard}:${port}/ (Ctrl+C för att stoppa)`);
+      return new Promise(() => {});
+    });
+  }
+  if (cmd === 'register' && target === 'publicera') {
+    return publiceraRegister({ server, igs: buildOrder(ws) }).then((ut) => {
+      for (const r of ut) console.log(`${r.ig}: ${r.antal} definitioner → HTTP ${r.http} (${r.skapade} nya, ${r.uppdaterade} uppdaterade)${r.fel.length ? `\n  ${r.fel.join('\n  ')}` : ''}`);
+      console.log(`Registret: ${server}`);
+      return ut.some((r) => r.http >= 300) ? 1 : 0;
+    });
+  }
+  if (cmd === 'register' && target === 'lista') {
+    return listaRegister(server).then((ut) => {
+      for (const r of ut) console.log(`${r.ig}: ${Object.entries(r.typer).map(([t, n]) => `${t} ${n}`).join(', ')}`);
+      return 0;
+    });
+  }
+  if (cmd === 'mermaid' && target) {
+    const rubrik = args.includes('--rubrik');
+    if (fs.existsSync(target)) {
+      const dir = path.dirname(path.resolve(target));
+      const alla = fs.readdirSync(dir).filter((f) => f.startsWith('ExampleScenario-') && f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+      console.log(mermaidFranScenario(JSON.parse(fs.readFileSync(target, 'utf8')), { resolver: (u) => alla.find((x) => x.url === u.split('|')[0]) || null, rubrik }));
+      return 0;
+    }
+    return scenarioFranRegister(server, target).then((r) => {
+      if (!r) throw new Error(`ExampleScenario ${target} finns inte i ${server}`);
+      console.log(mermaidFranScenario(r.es, { resolver: r.resolver, rubrik }));
+      return 0;
+    });
+  }
   if (cmd === 'externa' && target === 'hamta') {
     return hamtaExterna(root, lasMiljo(root, mot || 'infopeak')).then((filer) => {
       for (const f of filer) console.log(`  ${f}`);
@@ -1176,6 +1291,8 @@ function main(argv) {
       }
       const fixed = postProcess(ig.dir);
       if (fixed) console.log(`  efterbehandling: ${fixed} rättelser av ärvda extensions`);
+      const diagram = flodessida(ig.dir);
+      if (diagram) console.log(`  sidan Användningsfall: ${diagram} sekvensdiagram ur ExampleScenario`);
       if (installeras(ig)) console.log(`  installerad i ${installLocal(ig.dir)}`);
     }
     return status;

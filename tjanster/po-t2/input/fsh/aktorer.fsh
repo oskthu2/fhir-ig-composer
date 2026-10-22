@@ -15,10 +15,10 @@ Description: "Källsystem som tillhandahåller patientöversiktens informationsm
 Instance: POT2Visning
 InstanceOf: ActorDefinition
 Usage: #definition
-Title: "Patientöversikt (T2): konsument"
+Title: "Patientöversikt (T2): visning"
 Description: "System som visar patientöversikten i Patientöversiktsfederationen."
 * name = "POT2Visning"
-* title = "Patientöversikt (T2): konsument"
+* title = "Patientöversikt (T2): visning"
 * status = #draft
 * type = #system
 * derivedFrom[0] = Canonical(POKonsument)

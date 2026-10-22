@@ -1,0 +1,29 @@
+# Lokalt: docker compose up
+#   Studion            http://localhost:4900/
+#   Definitionsregister http://localhost:8080/fhir (HAPI FHIR R5)
+# Publicera definitionerna i registret:
+#   docker compose exec studio node verktyg/ig-composer.mjs register publicera
+# Samma filer används av devcontainern (Codespaces eller VS Code Dev Containers).
+services:
+  studio:
+    build: .
+    ports:
+      - "4900:4900"   # studion
+      - "4800:4800"   # federation starta --port 4800
+    volumes:
+      - .:/arbetsyta
+    environment:
+      FHIR_REGISTER: http://register:8080/fhir
+      # Läsadapterns hämtning av externa specifikationer (valfritt):
+      INFOPEAK_ANVANDARE: ${INFOPEAK_ANVANDARE:-}
+      INFOPEAK_LOSENORD: ${INFOPEAK_LOSENORD:-}
+    depends_on:
+      - register
+
+  register:
+    image: hapiproject/hapi:v8.12.0-2
+    ports:
+      - "8080:8080"
+    environment:
+      hapi.fhir.fhir_version: R5
+      hapi.fhir.allow_external_references: "true"

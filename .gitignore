@@ -2,6 +2,7 @@
 input/fsh/_komponerat/
 **/input/fsh/_komponerat/
 **/input/pagecontent/komposition.md
+**/input/pagecontent/anvandningsfall.md
 **/komposition.json
 
 # SUSHI och IG Publisher
@@ -28,3 +29,4 @@ rapport/
 # Federationstestet genereras av ig-composer federation testa
 federation.json
 federation-*.json
+**/Requirements-fromNarrative.json

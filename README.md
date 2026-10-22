@@ -20,6 +20,17 @@ Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak o
 
 (`node verktyg/ig-composer.mjs matris` tar fram matrisen ur IG:arna.)
 
+## Kom igång
+
+| Sätt | Vad du får | Så här |
+|---|---|---|
+| **Bara titta** | Vyn (`vy.html`), utan redigering | Actions → *Bygg och testa* → senaste körningen → artefakten **matrisvy** → öppna `vy.html` |
+| **Codespaces** | Studion, mocken och definitionsregistret i webbläsaren, inget att installera | *Code* → *Codespaces* → *Create codespace*. Studion öppnas på port 4900 när bygget är klart. |
+| **Docker lokalt** | Samma sak på din dator; behövs mot interna testmiljöer | `docker compose up` → http://localhost:4900/ (studio) och http://localhost:8080/fhir (register) |
+| **Node lokalt** | Allt utom registret | Node ≥ 20 och `npm i -g fsh-sushi@3`, sedan kommandona under *Bygga* och `node verktyg/ig-composer.mjs studio` |
+
+Devcontainern (`.devcontainer/`) och `docker-compose.yml` beskriver samma miljö: tjänsten `studio` (Node, SUSHI, git; i devcontainern även Java och Jekyll för IG Publisher) med arbetsytan monterad, och tjänsten `register` (HAPI FHIR R5). Studion skriver i dina filer, så ändringar syns i `git status` som vanligt.
+
 ## Kravmodell: användningsfall, scenarier och spårbarhet
 
 Kravmodellen följer kedjan i ISO/TR 19669: från kravspecifikation (användningsfall, scenarier, informationsbehov) via harmonisering (profiler, förmågor) till det som en tjänst publicerar och en ändpunkt i drift implementerar. Allt uttrycks i FHIR R5:
@@ -198,6 +209,48 @@ I CI körs läsadaptern bara på begäran (`workflow_dispatch` med `infopeak: tr
 
 Testköraren prövar flöden och kontrakt: interaktioner, sökparametrar, profiler som anges i `meta.profile`, registreringar och att mottagare går att hitta. Den validerar inte resursernas innehåll mot profilerna.
 
+## Studio: redigera system, användningsfall och komposition
+
+```sh
+node verktyg/ig-composer.mjs studio            # http://127.0.0.1:4900/ (STUDIO_VARD=0.0.0.0 i container)
+```
+
+Studion är matrisvyn med redigering. Källan är fortsatt filerna i git: studion skriver dem, med kommentarer och ordning bevarade, komponerar om alla IG:ar utan SUSHI (någon sekund) och visar resultatet. Längst upp står ändrade filer med diff och *återställ*, kvittot från senaste sparningen (fel och varningar från kompositionen) och en knapp för hela bygget med SUSHI.
+
+- **System** (*Redigera systemet*, *＋ Nytt system*): titel, organisation med HSA-id, ändpunkter, roller per tjänst, tillval som hör till de valda rollerna och informationsmängder (obligatoriska låsta, valfria valbara, eller *som nuläget*). Efter sparning visas den nya summan av krav, gapet och testlistan direkt.
+- **Användningsfall och delflöden** (*Redigera skissen*, *＋ Nytt användningsfall*, *＋ Nytt delflöde*): aktörer väljs bland IG:ns `ActorDefinition`, informationsbehov bland de logiska modellerna, steg med från, till, operation och vad som hämtas. Krav kan hämtas ur kravkatalogen, användningsfall kan inkluderas, och steg kan hämtas från en annan skiss (aktörer och informationsbehov följer med). YAML går att förhandsgranska.
+- **Komposition** (*Redigera kompositionen*): vilka paket IG:n komponerar; för en tjänst vilka användningsfall den har och vilka informationsmängder som är valfria; för en federation förutsättningar och flödesmönster.
+
+Skrivningar kräver huvudet `X-Studio`, så att en annan webbsida inte kan skriva via studion. Studion lyssnar bara på 127.0.0.1 om inte `STUDIO_VARD` säger annat.
+
+## Flöden: ExampleScenario som styrande källa
+
+Ett flöde skrivs en gång, i skissformatet (för hand eller i studion), och kompileras till FHIR: `ExampleScenario` för flödet och `Requirements` för kraven. Allt annat utgår från `ExampleScenario`:
+
+- **IG:ns webbsidor:** efter SUSHI genererar `bygg` (och `efterbehandla`) sidan *Användningsfall* med ett sekvensdiagram per användningsfall. Sidan läggs in i ImplementationGuide-resursen och menyn. IG Publisherns mall renderar Mermaid. Invävda delflöden (`step.workflow`) expanderas och ramas in, och delflödets aktörer binds till huvudflödets aktörer med samma roll.
+- **Verktyget:** kravspårning, systemanalys och testkörning använder samma modell.
+- **Registret:** `ig-composer mermaid <kanonisk URL>` ritar diagrammet direkt ur ExampleScenario i definitionsregistret, och för en fil med `ig-composer mermaid <fil>`.
+
+`ExampleScenario` är rätt FHIR-resurs för interaktioner mellan aktörer: R5 har `actor`, `process.step.operation` med initiator och mottagare, `alternative` och `workflow` till andra scenarier. `PlanDefinition` och `ActivityDefinition` beskriver vad som ska göras i vården (protokoll, beslutsstöd), inte vilka system som anropar vilka. Kraven ligger i `Requirements`, rollerna i `ActorDefinition` och API:erna i `CapabilityStatement`.
+
+## Definitionsregister: IG:arnas definitioner som API
+
+```sh
+node verktyg/ig-composer.mjs register publicera [--server URL]   # standard FHIR_REGISTER eller http://localhost:8080/fhir
+node verktyg/ig-composer.mjs register lista [--server URL]
+```
+
+Tjänstekatalogen gör anslutningspunkter sökbara som API (`Endpoint`). Registret gör samma sak för specifikationerna: alla IG:ars definitioner (profiler, logiska modeller, `ActorDefinition`, `CapabilityStatement`, `Requirements`, `ExampleScenario`, `ImplementationGuide` …) publiceras i en FHIR-server, HAPI R5 i `docker-compose.yml`. Varje IG skrivs i en transaktion med villkorad uppdatering på `url` och `version`, så att en ny körning uppdaterar i stället för att skapa dubbletter. Varje resurs taggas med IG:n den kommer från. Exempel ingår inte.
+
+Då kan man till exempel:
+- hämta en tjänsts informationsmängder: `CapabilityStatement?url=https://fhir.inera.se/ig/po-t2/CapabilityStatement/DiagnosAPI`
+- se vilka aktörer en IG har: `ActorDefinition?_tag=https://fhir.inera.se/ig/conventions/CodeSystem/ig|inera.tjanst.npo`
+- rita ett flöde: `ig-composer mermaid https://fhir.inera.se/ig/npo/ExampleScenario/VardpersonalPatientoversikt`
+
+CI startar HAPI som tjänst, testar registret och publicerar alla IG:ar i det.
+
+Visionen är att registret blir källan som tjänster, system och verktyg läser ifrån, i stället för paket i repon. Git är fortsatt platsen där ändringar skrivs och granskas: studion skriver filer, bygget publicerar i registret. Nästa steg är att verktyget kan komponera från registret (`--fran-register`), så att byggblock och federationer inte behöver finnas i samma arbetsyta, och att varje tjänsts specifikationer per informationsmängd också registreras i tjänstekatalogen.
+
 ## Interaktiv matrisvy
 
 ```sh
@@ -209,7 +262,8 @@ node verktyg/ig-composer.mjs vy     # skriver vy.html
 
 - klicka på en **tjänst** i matrisen för dess kravprofiler per systemroll (härledning, förmågor, elementkrav filtrerbara per aktör med egen/ärvd/bas-härkomst, verksamhetskrav), vad som kommer med varifrån, exponerade profiler, komponerade paket och diagnostik;
 - klicka på en **domän, federation eller ett byggblock** för var det används (direkt eller via andra byggblock) och vilka av dess artefakter som finns i vilka IG:ar – underlag för konsekvensanalys vid versionsbyte;
-- **söka** efter en artefakt, aktör eller ett paket och se alla IG:ar där den finns, med läge (lokal, kopierad, genererad, refererad, utelämnat) och kedja.
+- **söka** efter en artefakt, aktör eller ett paket och se alla IG:ar där den finns, med läge (lokal, kopierad, genererad, refererad, utelämnat) och kedja;
+- se och kopiera **Mermaid** för varje användningsfall (samma diagram som på IG:ns sida *Användningsfall*).
 
 Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 
@@ -236,7 +290,10 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 │   └── nulage/                CapabilityStatement (kind=instance) och T2-katalogerna
 ├── miljoer/                   verkliga T2-realiseringar för läsadaptern (infopeak.yaml)
 ├── externa/                   ögonblicksbilder av externa specifikationer (CC0)
-└── verktyg/                   ig-composer (Node ≥ 20)
+├── verktyg/                   ig-composer (Node ≥ 20): komposition, studio, mock, läsadapter, register, Mermaid
+├── .devcontainer/             Codespaces och VS Code Dev Containers
+├── Dockerfile                 studion i en container
+└── docker-compose.yml         studio + definitionsregister (HAPI FHIR R5)
 ```
 
 Varje katalog under `konventioner/`, `byggblock/`, `federationer/`, `stodtjanster/` och `tjanster/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon (skapade från `IneraFHIRTemplate`) som komponeras hit via arbetsytan.
@@ -245,7 +302,7 @@ Historiken är flyttad från `komposition/` på branchen `claude/trusting-ritchi
 
 ## Bygga
 
-CI (`.github/workflows/bygg.yml`) kör samma sak vid varje push och pull request: verktygets tester, `bygg` för alla IG:ar och `matris`.
+CI (`.github/workflows/bygg.yml`) kör samma sak vid varje push och pull request: `bygg` för alla IG:ar, verktygets tester (med HAPI som definitionsregister), systemrapporter, federationstestet, publicering i registret, `matris` och `vy`.
 
 ```sh
 npm install -g fsh-sushi
@@ -344,6 +401,7 @@ För varje komponerad IG (allt genereras och är git-ignorerat):
 - `input/fsh/_komponerat/` – kopierad FSH per källpaket och `_genererat.fsh` (federationsprofiler, förmågor, krav, ExampleScenario och Requirements från skissformatet).
 - `input/pagecontent/komposition.md` – sidan *Komposition*: komponerade paket, exponerade profiler, **kravprofil per systemroll** (elementkrav längs arvskedja och baser, verksamhetskrav) och *vad kommer med var*.
 - `komposition.json` – samma sak maskinläsbart, underlag för visualisering.
+- `input/pagecontent/anvandningsfall.md` – sidan *Användningsfall* med sekvensdiagram (Mermaid) ur IG:ns ExampleScenario, genererad efter SUSHI.
 
 ## NPÖ och 1177 Journal
 
@@ -364,6 +422,8 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 
 ## Nästa steg
 
+- Komponera från definitionsregistret (`--fran-register`) i stället för från arbetsytan.
+- Studion: redigera alternativ i steg, profiler och förmågor; öppna en pull request direkt från studion.
 - Dela upp i egna repon och lägg `ig-composer` som steg i `fhir-ig-workflows`.
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera tjänsternas genererade specifikationer per informationsmängd (`kind=requirements`) i tjänstekatalogen.

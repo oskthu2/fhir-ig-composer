@@ -12,6 +12,7 @@ import YAML from 'yaml';
 // systemnivå i förmågorna.
 const RESOURCE_OPS = new Set(['read', 'vread', 'update', 'patch', 'delete', 'history-instance', 'history-type', 'create', 'search-type']);
 const SYSTEM_OPS = new Set(['search-system', 'history-system', 'transaction', 'batch']);
+const RESTFUL = new Set([...RESOURCE_OPS, ...SYSTEM_OPS, 'capabilities', 'operation']);
 const VERB = {
   read: ['läsa', 'läser'], vread: ['läsa', 'läser'], 'search-type': ['söka', 'söker'], 'search-system': ['söka', 'söker'],
   create: ['skapa', 'skapar'], update: ['uppdatera', 'uppdaterar'], patch: ['ändra', 'ändrar'], delete: ['ta bort', 'tar bort'],
@@ -299,7 +300,8 @@ export function composeScenarios(ctx) {
     const instansNyckel = (s) => (s.informationsbehov?.profil ? s.informationsbehov.nyckel : (s.resurstyp && !s.informationsbehov ? s.resurstyp.toLowerCase() : null));
     const operation = (s, p) => {
       const ut = [`${p}.operation.title = "${fshStr(s.titel)}"`];
-      if (s.operation) ut.push(`${p}.operation.type = $restful-interaction#${s.operation}`);
+      // Operationer utanför FHIR REST (t.ex. token) får bara en kod.
+      if (s.operation) ut.push(RESTFUL.has(s.operation) ? `${p}.operation.type = $restful-interaction#${s.operation}` : `${p}.operation.type.code = #${s.operation}`);
       if (s.fran) ut.push(`${p}.operation.initiator = "${s.fran}"`);
       if (s.till) ut.push(`${p}.operation.receiver = "${s.till}"`);
       const nyckel = instansNyckel(s);

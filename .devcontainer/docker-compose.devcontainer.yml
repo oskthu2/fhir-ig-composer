@@ -1,0 +1,7 @@
+# Tillägg för devcontainern: arbetsytan monteras från repot och containern
+# hålls igång; studion startas av postStartCommand.
+services:
+  studio:
+    volumes:
+      - ..:/arbetsyta:cached
+    command: sleep infinity

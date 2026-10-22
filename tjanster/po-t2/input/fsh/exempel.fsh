@@ -16,7 +16,7 @@ Usage: #example
 Title: "Exempel: läkemedel"
 Description: "Läkemedel för testpatienten."
 * status = #recorded
-* medication.concept = http://snomed.info/sct#386873009 "Enalapril"
+* medication.concept = http://snomed.info/sct#386873009 "Lisinopril"
 * subject.identifier.system = "http://electronichealth.se/identifier/personnummer"
 * subject.identifier.value = "191212121212"
 * subject.display = "Anna Exempel"

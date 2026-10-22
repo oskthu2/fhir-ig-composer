@@ -5,7 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
-import { loadWorkspace, compose, matrix, postProcess, viewData, renderView, analyseSystems } from './ig-composer.mjs';
+import { loadWorkspace, compose, matrix, postProcess, viewData, renderView, analyseSystems, flodessida, komponeraAlla } from './ig-composer.mjs';
+import { mermaidFranScenario } from './mermaid.mjs';
+import { transaktion, definitioner, IG_TAGG, publiceraRegister, scenarioFranRegister } from './register.mjs';
+import { startaStudio, skrivKomposition, skrivSystem, skrivSkiss } from './studio.mjs';
 import { apiStatus, loadSystems, analyseSystem } from './system.mjs';
 import { MockFederation, fhir } from './mock.mjs';
 import { testaFederation, byggFederation } from './federation.mjs';
@@ -444,4 +447,129 @@ test('tjänstens specifikationer jämförs med de externa de motsvarar', () => {
   assert.ok(diagnos.includes('varning: Condition: den externa har sökparametrarna recorder'));
   assert.ok(diagnos.some((x) => x.startsWith('varning: Den externa kräver även Practitioner')));
   assert.ok(j.every((x) => !x.avvikelser.some((a) => a.niva === 'fel')));
+});
+
+// ---------------------------------------------------------------- flöden, register och studio
+
+const esKatalog = (ig) => path.join(root, ig, 'fsh-generated', 'resources');
+const lasEs = (ig) => fs.readdirSync(esKatalog(ig)).filter((f) => f.startsWith('ExampleScenario-')).map((f) => JSON.parse(fs.readFileSync(path.join(esKatalog(ig), f), 'utf8')));
+
+test('Mermaid ur ExampleScenario: invävda delflöden expanderas, alternativ och svar ritas', () => {
+  const alla = lasEs('tjanster/npo');
+  const es = alla.find((x) => x.name === 'VardpersonalPatientoversikt');
+  const mm = mermaidFranScenario(es, { resolver: (u) => alla.find((x) => x.url === u.split('|')[0]) });
+  const rader = mm.split('\n');
+  assert.equal(rader[0], 'sequenceDiagram');
+  assert.ok(rader.includes('  actor vardpersonal as Vårdpersonal'));
+  assert.ok(mm.includes('note over journal,Tjanstekatalog') || mm.includes('Tjanstekatalog as Tjänstekatalogen'));
+  assert.ok(rader.some((r) => r.trim() === 'journal->>Tjanstekatalog: 4.1 Tjänstesökning (T1) på specifikation och logisk adress [search-type]'));
+  assert.ok(rader.some((r) => r.trim().startsWith('alt ')) && rader.some((r) => r.trim().startsWith('else Källsystemet svarar inte')));
+  assert.ok(rader.includes('    kalla-->>journal: vardkontakt') && rader.includes('  kalla-->>journal: fastkontakt'));
+  // Utan resolver blir delflödena noteringar.
+  assert.ok(mermaidFranScenario(es).includes('↳ Tjänstesökning') || mermaidFranScenario(es).includes('↳ T2Uppslag'));
+  // Tecken som Mermaid tolkar tas bort.
+  assert.ok(!mermaidFranScenario({ actor: [{ key: 'a', title: 'A#1;' }, { key: 'b', title: 'B' }], process: [{ step: [{ operation: { title: 'x; y #z', initiator: 'a', receiver: 'b' } }] }] }).match(/[#;]/));
+});
+
+test('sidan Användningsfall genereras ur ExampleScenario och läggs i IG:n', () => {
+  const dir = path.join(root, 'tjanster', 'po-t2');
+  const sida = fs.readFileSync(path.join(dir, 'input', 'pagecontent', 'anvandningsfall.md'), 'utf8');
+  assert.equal((sida.match(/<pre class="language-mermaid"><code class="language-mermaid">sequenceDiagram/g) || []).length, 4);
+  assert.ok(!/<code class="language-mermaid">[^<]*>>/.test(sida), 'pilarna är HTML-kodade');
+  const igJson = JSON.parse(fs.readFileSync(path.join(dir, 'fsh-generated', 'resources', 'ImplementationGuide-inera.tjanst.pot2.json'), 'utf8'));
+  assert.ok(igJson.definition.page.page.some((p) => p.name === 'anvandningsfall.html'));
+  assert.match(fs.readFileSync(path.join(dir, 'fsh-generated', 'includes', 'menu.xml'), 'utf8'), /anvandningsfall\.html/);
+  // Idempotent: en andra körning dubblerar inte sidan.
+  assert.equal(flodessida(dir), 4);
+  const igJson2 = JSON.parse(fs.readFileSync(path.join(dir, 'fsh-generated', 'resources', 'ImplementationGuide-inera.tjanst.pot2.json'), 'utf8'));
+  assert.equal(igJson2.definition.page.page.filter((p) => p.name === 'anvandningsfall.html').length, 1);
+});
+
+test('registret: en transaktion per IG med villkorad uppdatering, IG:ns referenser pekas om', () => {
+  const ig = ws.get('inera.tjanst.pot2');
+  const t = transaktion(ig, definitioner(ig));
+  assert.equal(t.type, 'transaction');
+  assert.ok(t.entry.every((e) => e.request.method === 'PUT' && /^\w+\?url=/.test(e.request.url) && !e.resource.id));
+  assert.ok(t.entry.every((e) => e.resource.meta.tag.some((x) => x.system === IG_TAGG && x.code === 'inera.tjanst.pot2')));
+  assert.ok(!t.entry.some((e) => ['Condition', 'MedicationStatement', 'Flag'].includes(e.resource.resourceType)), 'exempel ingår inte');
+  const igRes = t.entry.find((e) => e.resource.resourceType === 'ImplementationGuide').resource;
+  const fullUrls = new Set(t.entry.map((e) => e.fullUrl));
+  assert.ok(igRes.definition.resource.length > 0 && igRes.definition.resource.every((r) => fullUrls.has(r.reference.reference)));
+});
+
+test('registret mot HAPI (sätt FHIR_REGISTER_TEST)', { skip: !process.env.FHIR_REGISTER_TEST }, async () => {
+  const server = process.env.FHIR_REGISTER_TEST;
+  const igs = [ws.get('inera.bb.pot2')];
+  const [forsta] = await publiceraRegister({ server, igs });
+  assert.equal(forsta.http, 200);
+  const [andra] = await publiceraRegister({ server, igs });
+  assert.equal(andra.uppdaterade, andra.antal, 'en ny körning uppdaterar i stället för att skapa');
+  const r = await scenarioFranRegister(server, 'https://fhir.inera.se/ig/bb-pot2/ExampleScenario/HamtaPatientoversikt');
+  assert.match(mermaidFranScenario(r.es, { resolver: r.resolver }), /konsument->>producent: 2 Konsumenten söker patientens diagnoser/);
+});
+
+// Studion arbetar på en kopia av arbetsytan.
+const kopieraArbetsyta = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-'));
+  const hoppa = new Set(['node_modules', 'output', 'temp', 'template', 'input-cache', '.git', 'rapport']);
+  fs.cpSync(root, dir, { recursive: true, filter: (f) => !hoppa.has(path.basename(f)) });
+  return dir;
+};
+
+test('studion skriver komposition, system och skisser och bevarar resten av filen', () => {
+  const dir = kopieraArbetsyta();
+  try {
+    const w = loadWorkspace(dir);
+    const fil = path.join(dir, 'tjanster', 'po-t2', 'sushi-config.yaml');
+    const fore = fs.readFileSync(fil, 'utf8');
+    skrivKomposition(w, 'inera.tjanst.pot2', { anvandningsfall: ['HamtaPatientoversikt', 'Extra'], valfria: [] }, dir);
+    const efter = fs.readFileSync(fil, 'utf8');
+    const ig2 = loadWorkspace(dir).get('inera.tjanst.pot2');
+    assert.deepEqual(ig2.anvandningsfall, ['HamtaPatientoversikt', 'Extra']);
+    assert.deepEqual(ig2.valfriaInformationsmangder, []);
+    assert.deepEqual(ig2.komponerar.map((k) => k.paket), ['inera.build.conventions', 'inera.bb.pot2', 'inera.fed.pot2']);
+    assert.equal(efter.split('\n').filter((r) => r.startsWith('pages:') || r.startsWith('menu:')).length, 2);
+    assert.ok(fore.includes('valfri-informationsmangd') && !efter.includes('valfri-informationsmangd'));
+    // Flödesmönster på en federation.
+    skrivKomposition(w, 'inera.fed.pot2', { flodesmonster: { vid: ['search-type'], fore: [], foreEnGang: false, foreVarje: ['T2Uppslag'], efter: [] } }, dir);
+    assert.deepEqual(loadWorkspace(dir).get('inera.fed.pot2').flodesmonster, { vid: ['search-type'], fore: [], foreEnGang: false, foreVarje: ['T2Uppslag'], efter: [] });
+    // System: befintlig fil behåller kommentarer, ny fil skapas.
+    skrivSystem(dir, 'JournalX', { tillval: ['SVODEngagemangsindexerad'] });
+    const jx = fs.readFileSync(path.join(dir, 'system', 'journalx.yaml'), 'utf8');
+    assert.match(jx, /^# Ett konkret system/);
+    assert.match(jx, /tillval:\n {2}- SVODEngagemangsindexerad/);
+    assert.equal(skrivSystem(dir, 'VardsystemY', { titel: 'Vårdsystem Y', roller: [{ tjanst: 'inera.tjanst.pot2', aktor: 'POT2Producent' }] }), path.join('system', 'vardsystem-y.yaml'));
+    assert.throws(() => skrivSystem(dir, '../x', {}), /Ogiltigt systemnamn/);
+    // Skisser: bara i en IG:s scenariokatalog.
+    assert.throws(() => skrivSkiss(dir, 'system/x.yaml', { anvandningsfall: 'X', steg: [] }), /scenarier/);
+    skrivSkiss(dir, 'byggblock/po-t2/input/scenarier/ny.yaml', { anvandningsfall: 'Ny', aktorer: { a: 'POKonsument' }, steg: [{ titel: 't', fran: 'a', till: 'a' }] });
+    assert.match(fs.readFileSync(path.join(dir, 'byggblock', 'po-t2', 'input', 'scenarier', 'ny.yaml'), 'utf8'), /^# Skapad i ig-composer studio/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('studions server: kräver X-Studio för att skriva, och visar ändringen efter omkomponering', async () => {
+  const dir = kopieraArbetsyta();
+  const server = await startaStudio({ root: dir, port: 0, verktyg: { loadWorkspace, viewData, renderView, komponeraAlla, bygg: () => ({ status: 0, logg: '' }) } });
+  const bas = `http://127.0.0.1:${server.address().port}`;
+  try {
+    assert.equal((await fetch(`${bas}/api/system/JournalX`, { method: 'PUT', body: '{}' })).status, 403);
+    const svar = await fetch(`${bas}/api/system/PrimarvardP`, {
+      method: 'PUT', headers: { 'x-studio': '1', 'content-type': 'application/json' },
+      body: JSON.stringify({ informationsmangder: { 'inera.tjanst.pot2': ['DiagnosInfo', 'LakemedelInfo', 'UppmarksamhetInfo'] } }),
+    });
+    const r = await svar.json();
+    assert.equal(svar.status, 200);
+    assert.deepEqual(r.fel, []);
+    const html = await (await fetch(`${bas}/`)).text();
+    const data = JSON.parse(html.match(/const DATA = (.*);\n/)[1]);
+    const p = data.system.find((a) => a.system === 'PrimarvardP');
+    assert.ok(p.roller.find((x) => x.aktor === 'POT2Producent').informationsmangder.every((i) => i.vald));
+    assert.ok(data.studio.skisser.some((x) => x.namn === 'HamtaPatientoversikt'));
+    assert.equal(data.studio.konfiguration['inera.fed.pot2'].roll, 'federation');
+  } finally {
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
