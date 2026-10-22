@@ -35,6 +35,11 @@ jobs:
       - name: Systemrapporter (krav, gap och testlista per system)
         run: node verktyg/ig-composer.mjs system
 
+      - name: Federationstest mot mockad federation
+        run: |
+          node verktyg/ig-composer.mjs federation testa
+          cat rapport/federation.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Matris federation × domän
         run: |
           node verktyg/ig-composer.mjs matris

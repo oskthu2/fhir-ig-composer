@@ -129,6 +129,37 @@ Exempelsystemen visar olika lägen:
 - **1177 invånarplattform:** inga gap.
 - **Labbsystem L:** inget nuläge inlämnat, så API-gapet är okänt, och registreringen saknas.
 
+## Mockad federation
+
+```sh
+node verktyg/ig-composer.mjs federation testa            # bygger mocken, kör och stänger
+node verktyg/ig-composer.mjs federation starta --port 4800   # låter mocken köra
+```
+
+`ig-composer` bygger en federation i minnet ur de komponerade IG:arna och systemregistret, i en HTTP-server med flera ändpunkter:
+
+| Ändpunkt | Vad | Kan |
+|---|---|---|
+| `/stod/<Aktör>` | Stödtjänster: tjänstekatalogen, patientindex, patientrelationstjänsten, loggtjänsten, prenumerationstjänsten | Det deras CapabilityStatements säger |
+| `/referens/<tjänst>/<Aktör>` | Referensimplementation per källsystemsroll | Summan av rollens server-krav. Data är tjänstens exempel. |
+| `/system/<System>` | Varje system i `system/` | Exakt det systemets nuläge (CapabilityStatement kind=instance) säger: andra interaktioner ger 405, andra sökparametrar 400, och utan nuläge svarar mocken 501 |
+
+Tjänstekatalogen fylls med exporten (systemens nuvarande API-instanser, med adresser till mocken) och med referensimplementationerna. `federation testa` kör sedan:
+
+1. **Nuläge live:** systemens `/metadata` och katalogens API-instanser hämtas över HTTP och gapanalysen körs på dem.
+2. **Förutsättningarna** för varje system och roll, alltså anslutningen. Systemen registrerar ändpunkt och API-instanser i katalogen, anmäler patienter till patientindex och prenumererar. Det kräver att systemet har klientförmågan i sitt nuläge, och om nuläget saknas antas förmågan.
+3. **Användningsfallen** steg för steg som HTTP-anrop. Andra källsystem hittas via katalogen (API-instanser som följer tjänstens specifikation), så en konsument frågar alla registrerade källsystem, sig själv inräknat. De invävda stegen körs också: patientrelation, spärr och loggning.
+4. **Nuläge live igen**, så att anslutningarna före och efter förutsättningarna kan jämföras.
+
+Resultatet skrivs till `federation.json` och `rapport/federation.md`, och visas i matrisvyn under System → **Federationstest**. I exemplet:
+- Journalsystem X:s registrering för 1177 går från *annan version* till *registrerad*, och Labbsystem L blir registrerat.
+- Journalsystem X:s källsystem svarar 400 på `date` och 405 på CareTeam. Det får även NPÖ-konsumenter att se fel när de frågar alla källsystem.
+- Journalsystem X saknar klientförmågan för Subscription, så anslutningen som konsument misslyckas.
+- Labbsystem L kan inte provas eftersom nuläget saknas.
+- Loggtjänsten tar emot en AuditEvent per hämtning.
+
+Mocken prövar flöden och kontrakt: interaktioner, sökparametrar, profiler som anges i `meta.profile`, och att mottagare går att hitta i katalogen. Den validerar inte resursernas innehåll mot profilerna.
+
 ## Interaktiv matrisvy
 
 ```sh
@@ -293,7 +324,8 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 - Dela upp i egna repon och lägg `ig-composer` som steg i `fhir-ig-workflows`.
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera genererade `<Aktör>CS` som `TKAPISpecificationCapability` i tjänstekatalogen.
-- Hämta nuläget direkt: läs `GET [bas]/metadata` och tjänstekatalogens sök-API i stället för filer.
+- Köra federationstestet mot riktiga ändpunkter (testmiljöer) i stället för mocken: samma körare, andra adresser.
+- Validera svaren mot profilerna (FHIR-valideraren) i federationstestet.
 - Testskript: generera `TestScript` per system ur testlistan.
 - Avlämningsyta: `ig-composer leverera` med låsfil, kanaler (utkast, kandidat, fastställd) och ändringsrapport per systemroll, så att ändringar inte slår igenom i tjänsterna direkt.
 - Härleda tjänsternas förmågor ur scenariernas operationer, i stället för handskrivna förmågor i byggblocken.

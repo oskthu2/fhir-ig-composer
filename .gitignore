@@ -24,3 +24,6 @@ vy.html
 
 # Systemrapporter genereras av ig-composer system
 rapport/
+
+# Federationstestet genereras av ig-composer federation testa
+federation.json

@@ -11,6 +11,10 @@
 //   ig-composer vy                          skriv vy.html: interaktiv matris från komposition.json
 //   ig-composer system                      summera krav per system (system/*.yaml), gap mot nuläge
 //                                           och testlista; skriver rapport/<system>.md
+//   ig-composer federation testa            bygg en mockad federation, kör förutsättningar och
+//                                           användningsfall mot den; skriver federation.json och
+//                                           rapport/federation.md
+//   ig-composer federation starta [--port N] starta den mockade federationen och låt den köra
 //
 // IG Publisher körs därefter med -no-sushi, så att efterbehandlingen står kvar.
 //
@@ -27,6 +31,7 @@ import {
 } from './fsh.mjs';
 import { composeScenarios } from './scenario.mjs';
 import { loadSystems, analyseSystem, renderReport } from './system.mjs';
+import { byggFederation, testaFederation, renderFederationReport } from './federation.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
 const OUT_FSH = path.join('input', 'fsh', '_komponerat');
@@ -809,6 +814,7 @@ export function viewData(ws, root) {
     matris: matrix(ws).json,
     manifest,
     system: analyseSystems(ws, root, manifest),
+    federation: fs.existsSync(path.join(root, 'federation.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'federation.json'), 'utf8')) : null,
   };
 }
 
@@ -992,6 +998,33 @@ function main(argv) {
     console.log(`Rapporter i ${dir}`);
     return status;
   }
+  if (cmd === 'federation') {
+    const portFlagga = args.indexOf('--port');
+    const port = portFlagga >= 0 ? Number(args[portFlagga + 1]) : 0;
+    const underlag = { ws, manifests: loadManifests(ws), systems: loadSystems(root), root, regler: loadRules(ws).system || {} };
+    if (target === 'starta') {
+      return byggFederation({ ...underlag, port: port || 4800 }).then(({ mock }) => {
+        console.log(`Mockad federation på ${mock.bas} (Ctrl+C för att stoppa):`);
+        for (const a of mock.andpunkter.values()) console.log(`  ${mock.url(a.sokvag)}${a.cs ? '' : '  (nuläge saknas)'}`);
+        return new Promise(() => {});
+      });
+    }
+    return testaFederation({ ...underlag, port }).then((r) => {
+      fs.writeFileSync(path.join(root, 'federation.json'), JSON.stringify(r, null, 2) + '\n');
+      fs.mkdirSync(path.join(root, 'rapport'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'rapport', 'federation.md'), renderFederationReport(r));
+      const per = {};
+      const tecken = { ok: '✓', fel: '✕', delvis: '~', okänt: '?', manuell: '·' };
+      for (const k of r.korningar) (per[k.system] ||= []).push(`${tecken[k.status] || '~'} ${k.titel} (${k.roll.split('#')[1]})`);
+      for (const [sys, lista] of Object.entries(per)) console.log(`${sys}:\n  ${lista.join('\n  ')}`);
+      for (const f of r.fore) {
+        const e = r.efter.find((x) => x.system === f.system);
+        console.log(`${f.system}: anslutningar före ${f.sammanfattning.anslutningarOk}/${f.anslutningar.length}, efter ${e.sammanfattning.anslutningarOk}/${e.anslutningar.length}`);
+      }
+      console.log('Skrev federation.json och rapport/federation.md');
+      return 0;
+    });
+  }
   if (cmd === 'vy') {
     const data = viewData(ws, root);
     const saknas = [...ws.values()].filter((ig) => ig.komponerar.length && !data.manifest[ig.id]).map((ig) => ig.id);
@@ -1031,15 +1064,15 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  try {
-    process.exitCode = main(process.argv);
-  } catch (err) {
-    console.error(`ig-composer: ${err.message}`);
-    process.exitCode = 2;
-  }
+  Promise.resolve().then(() => main(process.argv))
+    .then((kod) => { process.exitCode = kod; })
+    .catch((err) => {
+      console.error(`ig-composer: ${err.message}`);
+      process.exitCode = 2;
+    });
 }

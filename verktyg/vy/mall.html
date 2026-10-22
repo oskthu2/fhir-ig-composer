@@ -143,6 +143,7 @@ table.matris .hörn { background: transparent; color: var(--svag); font-weight: 
 .status { font-size: 0.75rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; background: var(--yta2); color: var(--svag); }
 .status.ok, .status.registrerad { background: color-mix(in srgb, var(--lokal) 18%, transparent); color: var(--lokal); }
 .status.delvis, .status.annan-version { background: color-mix(in srgb, var(--federation) 22%, transparent); color: var(--federation); }
+.status.fel { background: color-mix(in srgb, var(--utelamnat) 18%, transparent); color: var(--utelamnat); }
 .status.saknas { background: color-mix(in srgb, var(--utelamnat) 18%, transparent); color: var(--utelamnat); }
 .del { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; padding: 0 6px; border-radius: 5px; margin: 1px 4px 1px 0; background: var(--yta2); }
 .del.ja { color: var(--lokal); } .del.nej { color: var(--utelamnat); text-decoration: line-through; text-decoration-thickness: 1.5px; } .del.okänt { color: var(--svag); }
@@ -285,6 +286,7 @@ const el = (tag, attrs = {}, ...barn) => {
 };
 const ROLL = { byggblock: 'Byggblock', federation: 'Federation', stodtjanst: 'Stödtjänst', tjanst: 'Tjänst', konvention: 'Konvention' };
 const SYSTEM = DATA?.system || [];
+const FEDERATION = DATA?.federation || null;
 const LÄGE = {
   lokal: 'lokal', kopierad: 'kopierad', genererad: 'genererad', ruleset: 'RuleSet', alias: 'alias',
   refererad: 'refererad', utelämnat: 'utelämnat',
@@ -660,7 +662,7 @@ function ritaAnvandningsfall(c, m) {
 }
 
 // ------------------------------------------------------------------ system
-const STATUS = { ok: 'ok', delvis: 'delvis', saknas: 'saknas', 'okänt': 'okänt nuläge', manuell: 'manuell', registrerad: 'registrerad', 'annan version': 'annan version' };
+const STATUS = { ok: 'ok', delvis: 'delvis', saknas: 'saknas', 'okänt': 'okänt nuläge', manuell: 'manuell', registrerad: 'registrerad', 'annan version': 'annan version', fel: 'fel', antagen: 'antagen förmåga', hoppad: 'hoppad' };
 const statusEl = (s) => el('span', { class: `status ${String(s).replace(' ', '-')}` }, STATUS[s] || s);
 const rollEtikett = (a, id) => a.roller.find((x) => x.id === id)?.titel || id;
 
@@ -721,7 +723,8 @@ function ritaSystem(p, namn) {
     { id: 'scn', titel: 'Användningsfall', antal: a.scenarier.filter((x) => valda.has(x.roll)).length, rita: (c) => ritaSystemScenarier(c, a, valda) },
     { id: 'ans', titel: 'Anslutningar', antal: ansl.length, rita: (c) => ritaSystemAnslutningar(c, a, valda) },
     { id: 'test', titel: 'Testlista', antal: tester.length, rita: (c) => ritaTestlista(c, a, tester) },
-  ]);
+    FEDERATION && { id: 'fed', titel: 'Federationstest', antal: FEDERATION.korningar.filter((k) => k.system === a.system && valda.has(k.roll)).length, rita: (c) => ritaFederationstest(c, a, valda) },
+  ].filter(Boolean));
 }
 
 function delar(lista, valda, namnAv) {
@@ -858,6 +861,44 @@ function ritaTestlista(c, a, tester) {
         el('td', {}, statusEl(t.status)),
         el('td', { class: 'via' }, t.roller.length > 1 ? `${t.roller.length} roller` : rollEtikett(a, t.roller[0])),
       ))))));
+  }
+}
+
+// ------------------------------------------------------------------ federationstest
+function ritaFederationstest(c, a, valda) {
+  const f = FEDERATION;
+  const fore = f.fore.find((x) => x.system === a.system);
+  const efter = f.efter.find((x) => x.system === a.system);
+  c.append(
+    el('p', { class: 'svag' }, 'Användningsfallen körda som HTTP-anrop mot en mockad federation (ig-composer federation testa, ',
+      new Date(f.genererad).toLocaleString('sv-SE'), '). Systemets mock kan exakt det dess nuläge säger. Andra källsystem hittas via den mockade tjänstekatalogen; förutsättningarna (anslutning) körs först.'),
+  );
+  if (fore?.anslutningar.length) {
+    c.append(el('h3', {}, 'Anslutningar i tjänstekatalogen'), el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Roll', 'Före förutsättningarna', 'Efter'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, fore.anslutningar.filter((x) => valda.has(x.roll)).map((x) => el('tr', {},
+        el('td', {}, rollEtikett(a, x.roll)),
+        el('td', {}, statusEl(x.status)),
+        el('td', {}, statusEl(efter.anslutningar.find((y) => y.roll === x.roll)?.status || '–')),
+      ))))));
+  }
+  for (const k of f.korningar.filter((x) => x.system === a.system && valda.has(x.roll))) {
+    c.append(
+      el('h3', {}, `${k.forutsattning ? 'Förutsättning: ' : ''}${k.titel} `, statusEl(k.status)),
+      el('p', { class: 'svag liten' }, rollEtikett(a, k.roll)),
+      el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+        el('thead', {}, el('tr', {}, ['Steg', 'Från → till', 'Status', 'Anrop och svar'].map((h) => el('th', {}, h)))),
+        el('tbody', {}, k.steg.map((st) => el('tr', {},
+          el('td', {}, el('span', { class: 'mono svag' }, st.nr), ' ', st.titel, st.operation ? el('div', { class: 'via' }, [st.operation, st.resurstyp].filter(Boolean).join(' · ')) : null),
+          el('td', { class: 'via' }, `${st.fran || ''} → ${st.till || ''}`),
+          el('td', {}, statusEl(st.status)),
+          el('td', { class: 'liten' }, st.text ? el('div', {}, st.text) : null, st.detaljer.map((d) => el('div', {},
+            el('span', { class: `del ${d.status === 'ok' ? 'ja' : d.status === 'fel' ? 'nej' : 'okänt'}` }, d.http), ' ',
+            el('span', { class: 'mono' }, d.anrop), ' ', el('span', { class: 'svag' }, `→ ${d.url.split('/').slice(3).join('/')}`),
+            d.text ? el('div', { class: 'via' }, d.text) : null))),
+        ))),
+      )),
+    );
   }
 }
 

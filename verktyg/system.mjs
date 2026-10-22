@@ -68,7 +68,9 @@ export function apiStatus(item, aktivaRoller) {
   return delar.every((d) => d.finns) ? 'ok' : 'delvis';
 }
 
-export function analyseSystem(sys, manifests, root, regler = {}) {
+// kallor: { nulageCs, exportBundle } ersätter filerna i sys.nulage, t.ex. när
+// nuläget hämtas live från en (mockad) federation.
+export function analyseSystem(sys, manifests, root, regler = {}, kallor = {}) {
   const fel = [];
   const registreringsroll = regler.registreringsroll || 'TjanstekatalogRegistrerare';
 
@@ -89,7 +91,7 @@ export function analyseSystem(sys, manifests, root, regler = {}) {
     };
   }).filter(Boolean);
 
-  const nulageCs = readJson(root, sys.nulage?.formaga);
+  const nulageCs = 'nulageCs' in kallor ? kallor.nulageCs : readJson(root, sys.nulage?.formaga);
   if (nulageCs === undefined) fel.push(`Nulägesfilen ${sys.nulage.formaga} finns inte`);
   const nulage = lasNulage(nulageCs);
 
@@ -200,7 +202,7 @@ export function analyseSystem(sys, manifests, root, regler = {}) {
   const kravUt = [...krav.values()].map((q) => ({ ...q, roller: [...q.roller] }));
 
   // ---- Anslutningar: förväntade API-instanser mot registrerade i tjänstekatalogen
-  const exportBundle = readJson(root, sys.nulage?.anslutningar);
+  const exportBundle = 'exportBundle' in kallor ? kallor.exportBundle : readJson(root, sys.nulage?.anslutningar);
   if (exportBundle === undefined) fel.push(`Anslutningsfilen ${sys.nulage.anslutningar} finns inte`);
   const andpunkter = new Set(sys.andpunkter || []);
   const registrerade = (exportBundle?.entry || []).map((e) => e.resource)

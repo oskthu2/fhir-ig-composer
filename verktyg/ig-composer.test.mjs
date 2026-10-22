@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
 import { loadWorkspace, compose, matrix, postProcess, viewData, renderView, analyseSystems } from './ig-composer.mjs';
-import { apiStatus } from './system.mjs';
+import { apiStatus, loadSystems } from './system.mjs';
+import { MockFederation, fhir } from './mock.mjs';
+import { testaFederation } from './federation.mjs';
+import { loadManifests } from './ig-composer.mjs';
 import { parseFsh, expandRules } from './fsh.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -297,4 +300,45 @@ test('system: testlistan har varje krav en gång, med alla roller som ställer d
   assert.equal(elm.length, 1);
   assert.equal(elm[0].roller.length, 2);
   assert.ok(x.testlista.some((t) => t.kategori === 'Scenario' && t.text.startsWith('Ansluta källsystem till SVOD')));
+});
+
+// ---------------------------------------------------------------- mockad federation
+
+test('mocken gör bara det ändpunktens CapabilityStatement säger', async () => {
+  const mock = new MockFederation();
+  await mock.starta();
+  try {
+    mock.laggTill('/x', {
+      resourceType: 'CapabilityStatement', kind: 'instance',
+      rest: [{ mode: 'server', resource: [{ type: 'Encounter', interaction: [{ code: 'search-type' }], searchParam: [{ name: 'patient' }] }] }],
+    }, [{ resourceType: 'Encounter', id: 'e1', status: 'completed' }]);
+    mock.laggTill('/okand', null);
+    assert.equal((await fhir(`${mock.bas}/x/Encounter?patient=P`)).json.total, 1);
+    assert.equal((await fhir(`${mock.bas}/x/Encounter?date=2026`)).status, 400);
+    assert.equal((await fhir(`${mock.bas}/x/CareTeam`)).status, 405);
+    assert.equal((await fhir(`${mock.bas}/x/Encounter`, { metod: 'POST', kropp: { resourceType: 'Encounter' } })).status, 405);
+    assert.equal((await fhir(`${mock.bas}/x/metadata`)).json.kind, 'instance');
+    assert.equal((await fhir(`${mock.bas}/okand/metadata`)).status, 501);
+  } finally {
+    await mock.stoppa();
+  }
+});
+
+test('federationstest: förutsättningar stänger anslutningsgapet, användningsfallen visar systemens gap', async () => {
+  const w = loadWorkspace(root);
+  const r = await testaFederation({ ws: w, manifests: loadManifests(w), systems: loadSystems(root), root, regler: rules.system });
+  const status = (sys, uc, roll) => r.korningar.find((k) => k.system === sys && k.anvandningsfall === uc && k.roll.endsWith(`#${roll}`))?.status;
+  // Anslutning: Journalsystem X registrerar 1177-rollen med rätt version, Labbsystem L registrerar sig.
+  const ans = (lista, sys) => lista.find((x) => x.system === sys).anslutningar.map((x) => x.status);
+  assert.deepEqual(ans(r.fore, 'JournalX'), ['registrerad', 'annan version']);
+  assert.deepEqual(ans(r.efter, 'JournalX'), ['registrerad', 'registrerad']);
+  assert.deepEqual(ans(r.efter, 'LabbsystemL'), ['registrerad']);
+  // Gap som visar sig vid körning.
+  assert.equal(status('JournalX', 'AnslutaKonsumentSVOD', 'NPOKonsument'), 'fel');
+  const po = r.korningar.find((k) => k.system === 'JournalX' && k.anvandningsfall === 'VardpersonalPatientoversikt' && k.roll.endsWith('#NPOKallsystem'));
+  assert.deepEqual(po.steg.filter((s) => s.status === 'fel').map((s) => s.detaljer[0].http), [400, 405]);
+  assert.equal(status('JournalX', 'TaDelAvLabbsvar', 'Journal1177KallsystemMarkande'), 'ok');
+  assert.equal(status('LabbsystemL', 'TaDelAvLabbsvar', 'Journal1177KallsystemFiltrerande'), 'okänt');
+  // Invävd loggning når loggtjänsten: en AuditEvent per hämtning i två körningar.
+  assert.equal(r.stod.find((x) => x.aktor === 'SVODLoggtjanst').resurser.AuditEvent, 4);
 });
