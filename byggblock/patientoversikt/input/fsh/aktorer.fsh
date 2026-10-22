@@ -77,3 +77,13 @@ Description: "Verksamhetskrav på producent i Patientöversikt."
 * statement[=].conformance[0] = #SHALL
 * statement[=].requirement = "Producenten SKA kunna lämna patientens vårdkontakter avgränsade i tid."
 * statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/patientoversikt/StructureDefinition/vardkontakt"
+
+Instance: Vardpersonal
+InstanceOf: ActorDefinition
+Usage: #definition
+Title: "Vårdpersonal"
+Description: "Hälso- och sjukvårdspersonal som tar del av patientens information."
+* name = "Vardpersonal"
+* title = "Vårdpersonal"
+* status = #draft
+* type = #person

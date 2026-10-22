@@ -21,6 +21,7 @@ Id: fast-kontakt
 Title: "Fast kontakt"
 Description: "En patients fasta vårdkontakt eller fasta läkarkontakt."
 * ^status = #draft
+* insert Realiserar(FastKontaktInfo)
 * status 1..1 MS
 * subject 1..1 MS
 * subject only Reference(Patient)

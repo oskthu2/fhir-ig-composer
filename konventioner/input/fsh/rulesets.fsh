@@ -40,3 +40,8 @@ RuleSet: KopieradFran(url)
 // CapabilityStatement, Requirements m.fl.).
 RuleSet: KopieradFranInstans(url)
 * extension[$kopierad-fran].valueCanonical = "{url}"
+
+// Harmonisering: profilen realiserar ett informationsbehov (logisk modell).
+//   * insert Realiserar(VardkontaktInfo)
+RuleSet: Realiserar(informationsbehov)
+* ^extension[$realiserar][+].valueCanonical = Canonical({informationsbehov})

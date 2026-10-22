@@ -1,0 +1,20 @@
+# Delflöde som SVOD:s flödesmönster väver in efter varje hämtning.
+delflode: SVODSparrOchLoggning
+nyckel: SVOD-SL
+titel: Tillämpa spärr och logga åtkomst
+syfte: Spärrad information visas inte, och all åtkomst loggas (PDL 4 kap. 3 §, 6 kap. 2 §).
+
+aktorer:
+  konsument: { roll: SVODKonsument, binder: fran }
+  logg: SVODLoggtjanst
+
+steg:
+  - titel: Konsumenten filtrerar bort information som omfattas av spärr
+    fran: konsument
+    till: konsument
+    krav: Konsumenten SKA tillämpa inre och yttre spärr utifrån resursens vårdenhet och vårdgivare innan informationen visas.
+  - titel: Konsumenten loggar åtkomsten
+    fran: konsument
+    till: logg
+    operation: create
+    resurstyp: AuditEvent

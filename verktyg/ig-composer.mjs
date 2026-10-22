@@ -23,13 +23,14 @@ import YAML from 'yaml';
 import {
   parseFsh, ruleLines, entityText, appendRules, parseInsert, expandRules, RESOURCE_TYPE,
 } from './fsh.mjs';
+import { composeScenarios } from './scenario.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
 const OUT_FSH = path.join('input', 'fsh', '_komponerat');
 const OUT_PAGE = path.join('input', 'pagecontent', 'komposition.md');
 const OUT_MANIFEST = 'komposition.json';
 // Konventionens RuleSets som verktyget läser i stället för att expandera.
-const KEEP = new Set(['Obligation', 'Bas', 'Kompositionsanvisning', 'KopieradFran', 'KopieradFranInstans']);
+const KEEP = new Set(['Obligation', 'Bas', 'Realiserar', 'Kompositionsanvisning', 'KopieradFran', 'KopieradFranInstans']);
 const SKIP_DIRS = new Set(['node_modules', 'fsh-generated', 'output', 'temp', 'template', 'input-cache', '.git']);
 
 // ---------------------------------------------------------------- arbetsyta
@@ -59,6 +60,8 @@ function loadIg(dir) {
     return s && String(s.valueString ?? s.valueCode);
   };
   const monster = ext('federationsmonster');
+  const flode = ext('flodesmonster');
+  const subs = (e, name) => (e?.extension || []).filter((x) => x.url === name);
   const dependencies = {};
   for (const [id, v] of Object.entries(cfg.dependencies || {})) {
     dependencies[id] = String(typeof v === 'object' ? v.version : v);
@@ -76,6 +79,13 @@ function loadIg(dir) {
       paket: sub(e, 'paket'), version: sub(e, 'version'), inkludering: sub(e, 'inkludering'),
     })),
     monster: monster && { ruleset: sub(monster, 'ruleset'), profilprefix: sub(monster, 'profilprefix') },
+    flodesmonster: flode && {
+      vid: subs(flode, 'vid').map((x) => x.valueCode),
+      fore: sub(flode, 'fore'),
+      foreEnGang: subs(flode, 'foreEnGang')[0]?.valueBoolean === true,
+      efter: sub(flode, 'efter'),
+    },
+    anvandningsfall: exts.filter((e) => e.url === EXT + 'anvandningsfall').map((e) => e.valueString),
     dependencies,
   };
 }
@@ -379,7 +389,30 @@ export function compose(ig, ws, rules) {
     }
   }
 
-  // 6. Kravprofil per systemroll: obligations längs arvskedjan och baserna.
+  // 6. Kravmodell: användningsfall och delflöden → ExampleScenario och
+  // Requirements, med invävning, harmonisering och täckningskontroll.
+  const realiserar = (p) => expandRules(p, ruleSets, KEEP)
+    .filter((r) => r.insert?.name === 'Realiserar' && !r.path)
+    .map((r) => r.insert.args[0]);
+  const scenarier = composeScenarios({
+    ig, rules, plan, ws,
+    fed: federationer[0]?.ig,
+    entities: all,
+    actors, ancestorsOf, capabilities,
+    serviceActors: ig.roll === 'tjanst' ? localActors : [],
+    profiles, exposed, parentOf, baseType, realiserar,
+    rollOf: (e) => (e ? rollOf(e) : undefined),
+    report: (niva, text) => warnOrFail(niva, text),
+  });
+  for (const { text, namn } of scenarier.genererat) {
+    if (names.has(namn)) fel.push(`Det genererade namnet ${namn} krockar med en artefakt i ${names.get(namn).origin.paket}`);
+    const [e] = parseFsh(text, OUT_FSH);
+    e.origin = { paket: ig.id, lage: 'genererad' };
+    generated.push(e);
+    if (e.meta.InstanceOf === 'Requirements') requirements.push(readRequirements(e));
+  }
+
+  // 7. Kravprofil per systemroll: obligations längs arvskedjan och baserna.
   const obligations = (p) => expandRules(p, ruleSets, KEEP)
     .filter((r) => r.insert?.name === 'Obligation')
     .map((r) => ({ element: r.path, kod: r.insert.args[0].replace(/^#/, ''), aktor: r.insert.args[1] }));
@@ -412,7 +445,7 @@ export function compose(ig, ws, rules) {
 
   return {
     ig, plan, copied, local, generated, aliases, utelamnat, refererat, exposed, kravprofiler,
-    baseType, basesOf, parentOf, fel, varningar,
+    anvandningsfall: scenarier.modell, baseType, basesOf, parentOf, fel, varningar,
   };
 }
 
@@ -432,6 +465,7 @@ function readActor(e) {
     name: e.name,
     id: e.id,
     title,
+    type: rules.map((r) => r.match(/^type\s*=\s*#(\w+)/)?.[1]).find(Boolean) || 'system',
     derivedFrom: rules.filter((r) => /^derivedFrom(\[[^\]]*\])?\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, ''))),
     capabilities: rules.filter((r) => /^capabilities\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, '')))[0],
   };
@@ -439,7 +473,20 @@ function readActor(e) {
 
 function readCapability(e) {
   const rules = ruleLines(e);
+  const interactions = {};
+  const systemInteractions = [];
+  let typ = null;
+  for (const r of rules) {
+    const t = r.match(/\.resource\[[^\]]*\]\.type\s*=\s*#(\w+)/);
+    if (t) { typ = t[1]; interactions[typ] ||= []; continue; }
+    const ri = r.match(/\.resource\[[^\]]*\]\.interaction\[[^\]]*\]\.code\s*=\s*#([\w-]+)/);
+    if (ri && typ) { interactions[typ].push(ri[1]); continue; }
+    const si = r.match(/^rest\[[^\]]*\]\.interaction\[[^\]]*\]\.code\s*=\s*#([\w-]+)/);
+    if (si) systemInteractions.push(si[1]);
+  }
   return {
+    interactions,
+    systemInteractions,
     entity: e,
     name: e.name,
     id: e.id,
@@ -567,6 +614,19 @@ function renderPage(r) {
     }
   }
 
+  if (r.anvandningsfall.length) {
+    out.push('', '### Användningsfall och delflöden', '', 'Kompilerade från skissformatet till ExampleScenario och Requirements. Steg markerade *invävt* kommer från federationens flödesmönster.');
+    for (const u of r.anvandningsfall) {
+      out.push('', `#### ${u.titel}`, '', `${u.typ === 'anvandningsfall' ? 'Användningsfall' : 'Delflöde'} [${u.namn}](ExampleScenario-${u.namn}.html) från ${code(u.paket)}.${u.syfte ? ` ${u.syfte}` : ''}`, '');
+      const bana = (k) => u.aktorer.find((a) => a.nyckel === k)?.titel || k;
+      for (const st of u.steg) {
+        const vad = st.typ === 'delflode' ? `*invävt:* ${st.titel} (${code(st.invavd)})` : `${st.titel}${st.fran ? ` – ${bana(st.fran)} → ${bana(st.till)}` : ''}${st.operation ? ` (${code(st.operation)}${st.profil ? `, ${st.profil}` : st.resurstyp ? `, ${st.resurstyp}` : ''})` : ''}`;
+        out.push(`${'   '.repeat(st.nr.split('.').length - 1)}${st.nr.split('.').length > 1 ? '-' : '1.'} ${st.nr}: ${vad}`);
+      }
+      if (u.krav.length) out.push('', `Krav: ${u.krav.map((k) => `[${k.namn}](Requirements-${k.namn}.html)`).join(', ')}.`);
+    }
+  }
+
   out.push('', '### Vad kommer med var', '', '| Artefakt | Typ | Ursprung | Läge | Kopierad från |', '|---|---|---|---|---|');
   const rows = [...r.local, ...r.copied, ...r.generated].filter((e) => !['Alias', 'RuleSet'].includes(e.kind));
   for (const e of rows) {
@@ -623,6 +683,7 @@ function manifest(r) {
       element: k.element.map((o) => ({ profil: o.profil.name, element: o.element, kod: o.kod, aktor: o.aktor, definieratI: o.kalla.name })),
       krav: k.krav.flatMap((req) => req.statements.map((s) => ({ nyckel: s.key, krav: s.requirement, styrka: s.conformance, kalla: req.name }))),
     })),
+    anvandningsfall: r.anvandningsfall,
     diagnostik: { fel: r.fel, varningar: r.varningar },
   };
 }

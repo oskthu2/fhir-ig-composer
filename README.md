@@ -17,6 +17,62 @@ Tjänster i prototypen:
 
 (`node verktyg/ig-composer.mjs matris` tar fram matrisen ur IG:arna.)
 
+## Kravmodell: användningsfall, scenarier och spårbarhet
+
+Kravmodellen följer kedjan i ISO/TR 19669: från kravspecifikation (användningsfall, scenarier, informationsbehov) via harmonisering (profiler, förmågor) till det som en tjänst publicerar och en ändpunkt i drift implementerar. Allt uttrycks i FHIR R5:
+
+| Begrepp | FHIR | Var |
+|---|---|---|
+| Aktör, person eller system | `ActorDefinition` | Byggblock och federationer |
+| Informationsbehov | Logisk modell (`Logical`) | Byggblock (i verkligheten från informationsunderlaget) |
+| Harmonisering | `* insert Realiserar(Informationsbehov)` på profilen | Byggblock och tjänster |
+| Användningsfall och delflöde | `ExampleScenario`, kompilerat från skissformatet | `input/scenarier/*.yaml` |
+| Stödtjänst | `ActorDefinition` + förmågor i federationen | Federationer |
+| Invävning | Federationens extension `flodesmonster` | Federationer |
+| Urval | Extension `anvandningsfall` på tjänstens IG | Tjänster |
+| Krav per deltagande aktör | `Requirements`, en sats per steg, `satisfiedBy` till profil och förmåga | Genereras |
+
+Ett användningsfall skrivs i skissformatet, utan FSH:
+
+```yaml
+anvandningsfall: VardpersonalPatientoversikt
+nyckel: PO
+titel: Vårdpersonal tar del av patientens vårdkontakter och fasta kontakter
+aktorer:
+  vardpersonal: Vardpersonal        # person
+  journal: PSKonsument
+  kalla: PSProducent
+informationsbehov:
+  vardkontakt: VardkontaktInfo      # logisk modell
+steg:
+  - titel: Journalsystemet söker patientens vårdkontakter
+    fran: journal
+    till: kalla
+    operation: search-type
+    hamtar: vardkontakt
+    alternativ:
+      - titel: Källsystemet svarar inte
+        steg: [ ... ]
+```
+
+En federation väver in delflöden (också skrivna i skissformatet) före och efter steg med vissa operationer. SVOD väver in *Verifiera patientrelation* före första hämtningen och *Tillämpa spärr och logga åtkomst* efter varje hämtning. Ett delflödes aktör med `binder: fran` är samma deltagare som avsändaren i steget som delflödet vävs in vid. Aktören får då båda rollerna, till exempel PSKonsument + SVODKonsument, och tjänsten måste ha en tjänsteaktör som spelar båda.
+
+`ig-composer` gör för varje IG:
+
+1. **Kompilerar** de valda användningsfallen och de delflöden som används till `ExampleScenario`. Invävda steg blir `step.workflow` med `invavd-av`.
+2. **Harmoniserar** varje informationsbehov till den profil som realiserar det, helst en exponerad profil.
+3. **Binder** scenarioaktörer till roller och, i en tjänst, till den tjänsteaktör som spelar dem.
+4. **Genererar** `Requirements` per användningsfall och deltagande systemaktör: en sats per steg, med `satisfiedBy` till profilen och aktörens förmåga, och `reference` till scenariot. Kraven hamnar i kravprofilen för tjänsteaktörerna.
+5. **Kontrollerar täckningen** (regler `scenarier.tackning`):
+   - rollen finns som ActorDefinition;
+   - informationsbehovet finns och har en profil;
+   - en tjänsteaktör spelar varje systemaktör;
+   - avsändare och mottagare har interaktionen i sina förmågor.
+
+I matrisvyn har varje tjänst och byggblock fliken **Användningsfall** med sekvensdiagram (invävda steg markerade), spårbarhet från kravsats till profil och förmåga, och täckning.
+
+Kedjan i FHIR: `ExampleScenario` → `Requirements` (per aktör) → `satisfiedBy` profil och `CapabilityStatement` → tjänsteaktör (`ActorDefinition.derivedFrom`) → i tjänstekatalogen `TKAPIInstance.instantiates` → ändpunkt.
+
 ## Interaktiv matrisvy
 
 ```sh
@@ -138,15 +194,17 @@ Elementkrav per systemroll skrivs `* element insert Obligation(#SHALL:populate, 
 
 ## Validering
 
-NPÖ har byggts med IG Publisher 3.0.1 (`-no-sushi` efter `komponera` → `sushi` → `efterbehandla`): **0 fel, 48 varningar**. 23 av varningarna är `kopierad-fran` som pekar på interna byggblock som inte publiceras, vilket är väntat. Resten är vanliga för Ineras IG:ar: HSA-OID:n saknar definition, kanoniska länkar i Requirements-narrativ, bindningar i bas-FHIR och OID för terminologi. Obligations i snapshoten för Vårdkontakt NPÖ blir de ärvda (PSProducent, PSKonsument) plus den egna (NPOKallsystem).
+NPÖ har byggts med IG Publisher 3.0.1 (`-no-sushi` efter `komponera` → `sushi` → `efterbehandla`). Före kravmodellen: **0 fel, 48 varningar**. 23 av varningarna är `kopierad-fran` som pekar på interna byggblock som inte publiceras, vilket är väntat. Resten är vanliga för Ineras IG:ar: HSA-OID:n saknar definition, kanoniska länkar i Requirements-narrativ, bindningar i bas-FHIR och OID för terminologi. Obligations i snapshoten för Vårdkontakt NPÖ blir de ärvda (PSProducent, PSKonsument) plus den egna (NPOKallsystem).
 
-1177 Journal: **0 fel, 62 varningar**, varav 32 är `kopierad-fran` mot interna byggblock. Resten är av samma slag som för NPÖ, plus IG Publishers rekommendation att labbsvar har `performer`.
+Med kravmodellen: **3 fel, 85 varningar**. De 3 felen kommer från IG-mallen `fhir2.base.template`: dess `layout-examplescenario.html` lägger `<h4>` direkt under sidans `<h2>`, vilket IG Publishers kontroll av rubriknivåer (WCAG) räknar som fel. De går inte att rätta från en IG och behöver rättas i mallen. Varningarna som tillkommit är av samma slag som tidigare: kanoniska länkar i Requirements-narrativ och `kopierad-fran` mot interna byggblock.
+
+1177 Journal (utan användningsfall): **0 fel, 62 varningar**, varav 32 är `kopierad-fran` mot interna byggblock. Resten är av samma slag som för NPÖ, plus IG Publishers rekommendation att labbsvar har `performer`.
 
 ## Utdata
 
 För varje komponerad IG (allt genereras och är git-ignorerat):
 
-- `input/fsh/_komponerat/` – kopierad FSH per källpaket och `_genererat.fsh` (federationsprofiler, förmågor, krav).
+- `input/fsh/_komponerat/` – kopierad FSH per källpaket och `_genererat.fsh` (federationsprofiler, förmågor, krav, ExampleScenario och Requirements från skissformatet).
 - `input/pagecontent/komposition.md` – sidan *Komposition*: komponerade paket, exponerade profiler, **kravprofil per systemroll** (elementkrav längs arvskedja och baser, verksamhetskrav) och *vad kommer med var*.
 - `komposition.json` – samma sak maskinläsbart, underlag för visualisering.
 
@@ -172,5 +230,8 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 - Dela upp i egna repon och lägg `ig-composer` som steg i `fhir-ig-workflows`.
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera genererade `<Aktör>CS` som `TKAPISpecificationCapability` i tjänstekatalogen.
-- Interaktiv matrisvy från `komposition.json` som kan skriva tillbaka extensions som pull requests.
+- Avlämningsyta: `ig-composer leverera` med låsfil, kanaler (utkast, kandidat, fastställd) och ändringsrapport per systemroll, så att ändringar inte slår igenom i tjänsterna direkt.
+- Härleda tjänsternas förmågor ur scenariernas operationer, i stället för handskrivna förmågor i byggblocken.
+- Användningsfall för 1177 Journal, med Individuell tillgångs delflöden (filtrera NOPAT).
+- Täckning vidare mot test (`TestScript` per aktör) och drift (ändpunkter i tjänstekatalogen).
 - Regel för kandidater att lyfta: samma skärpning i flera tjänster → lyft till byggblocket.

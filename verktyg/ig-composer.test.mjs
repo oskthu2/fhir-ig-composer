@@ -155,3 +155,76 @@ test('vyn bäddar in data utan att kunna avsluta script-elementet', () => {
   const json = html.match(/const DATA = (.*);\n/)[1];
   assert.equal(JSON.parse(json).igs.at(-1).titel, '</script><script>alert(1)</script>');
 });
+
+// ---------------------------------------------------------------- kravmodell
+
+const npoUc = () => compose(ws.get('inera.tjanst.npo'), loadWorkspace(root), rules).anvandningsfall;
+
+test('NPÖ: SVOD:s delflöden vävs in – verifiering en gång, spärr och loggning efter varje hämtning', () => {
+  const uc = npoUc().find((u) => u.namn === 'VardpersonalPatientoversikt');
+  const huvud = uc.steg.filter((s) => !s.nr.includes('.'));
+  assert.deepEqual(huvud.map((s) => (s.typ === 'delflode' ? `[${s.delflode}]` : s.operation || 'ui')), [
+    'ui', '[SVODVerifieraPatientrelation]', 'search-type', '[SVODSparrOchLoggning]', 'search-type', '[SVODSparrOchLoggning]', 'ui',
+  ]);
+  assert.ok(uc.steg.filter((s) => s.delflode).every((s) => s.invavd === 'inera.fed.svod'));
+});
+
+test('NPÖ: informationsbehov harmoniseras till tjänstens profiler', () => {
+  const uc = npoUc().find((u) => u.namn === 'VardpersonalPatientoversikt');
+  assert.deepEqual(uc.informationsbehov.map((i) => [i.modell, i.profil]),
+    [['VardkontaktInfo', 'VardkontaktNPO'], ['FastKontaktInfo', 'FastKontakt']]);
+});
+
+test('NPÖ: scenarioaktörer binds till roller och tjänsteaktörer, stödtjänster känns igen', () => {
+  const a = Object.fromEntries(npoUc()[0].aktorer.map((x) => [x.nyckel, x]));
+  assert.deepEqual(a.journal.roller, ['PSKonsument', 'SVODKonsument']);
+  assert.deepEqual(a.journal.spelasAv, ['NPOKonsument']);
+  assert.deepEqual(a.kalla.spelasAv, ['NPOKallsystem']);
+  assert.equal(a.journal.titel, 'NPÖ: konsument');
+  assert.ok(a.tgp.stodtjanst && a.logg.stodtjanst);
+  assert.equal(a.vardpersonal.typ, 'person');
+});
+
+test('NPÖ: krav per aktör, med satisfiedBy till profil och tjänstens förmågor', () => {
+  const r = compose(ws.get('inera.tjanst.npo'), loadWorkspace(root), rules);
+  const uc = r.anvandningsfall[0];
+  const kalla = uc.krav.find((k) => k.bana === 'kalla');
+  const po3 = kalla.satser.find((s) => s.nyckel === 'PO-3');
+  assert.deepEqual(po3.satisfiedBy.map((u) => u.split('/').pop()), ['vardkontakt-npo', 'NPOKallsystemCS']);
+  // Delflödenas krav finns invävda i användningsfallets, inte som egna Requirements i tjänsten.
+  assert.ok(uc.krav.find((k) => k.bana === 'journal').satser.some((s) => s.nyckel === 'SVOD-PR-2.1'));
+  assert.deepEqual(r.anvandningsfall.filter((u) => u.typ === 'delflode').flatMap((u) => u.krav), []);
+  // Kravprofilen för NPÖ: konsument tar med scenariokraven.
+  const kp = r.kravprofiler.find((k) => k.aktor.name === 'NPOKonsument');
+  assert.ok(kp.krav.some((q) => q.name === 'VardpersonalPatientoversiktJournalKrav'));
+  assert.deepEqual(r.fel, []);
+  assert.deepEqual(r.varningar, []);
+});
+
+test('byggblocket kompilerar sitt användningsfall utan invävning', () => {
+  const r = compose(ws.get('inera.bb.patientoversikt'), loadWorkspace(root), rules);
+  const uc = r.anvandningsfall.find((u) => u.namn === 'VardpersonalPatientoversikt');
+  assert.ok(!uc.steg.some((s) => s.typ === 'delflode'));
+  assert.deepEqual(uc.informationsbehov.map((i) => i.profil), ['Vardkontakt', 'FastKontakt']);
+});
+
+test('täckningen hittar okänd roll, okänt informationsbehov och saknad förmåga', () => {
+  const fil = path.join(root, 'byggblock', 'patientoversikt', 'input', 'scenarier', 'zz-test.yaml');
+  fs.writeFileSync(fil, YAML.stringify({
+    anvandningsfall: 'TestFall', nyckel: 'T', titel: 'Test',
+    aktorer: { a: 'PSKonsument', b: 'FinnsInte', c: 'PSProducent' },
+    informationsbehov: { x: 'OkandInfo' },
+    steg: [
+      { titel: 'okänd', fran: 'a', till: 'b', operation: 'read', hamtar: 'x' },
+      { titel: 'saknad förmåga', fran: 'a', till: 'c', operation: 'delete', resurstyp: 'Encounter' },
+    ],
+  }));
+  try {
+    const r = compose(ws.get('inera.bb.patientoversikt'), loadWorkspace(root), rules);
+    assert.ok(r.fel.some((f) => f.includes('rollen FinnsInte')));
+    assert.ok(r.fel.some((f) => f.includes('OkandInfo') && f.includes('logisk modell')));
+    assert.ok(r.varningar.some((f) => f.includes('saknar delete på Encounter')));
+  } finally {
+    fs.rmSync(fil);
+  }
+});

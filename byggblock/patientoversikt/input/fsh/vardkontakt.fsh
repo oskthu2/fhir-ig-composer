@@ -13,6 +13,7 @@ Id: vardkontakt
 Title: "Vårdkontakt"
 Description: "En vårdkontakt i Patientöversikt."
 * ^status = #draft
+* insert Realiserar(VardkontaktInfo)
 * status MS
 * class MS
 * subject 1..1 MS

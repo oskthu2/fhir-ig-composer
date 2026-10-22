@@ -1,0 +1,46 @@
+# Användningsfall i skissformatet. Kompileras av ig-composer till ett
+# ExampleScenario och Requirements per deltagande aktör. Federationens
+# flödesmönster vävs in när användningsfallet ingår i en tjänst.
+anvandningsfall: VardpersonalPatientoversikt
+nyckel: PO
+titel: Vårdpersonal tar del av patientens vårdkontakter och fasta kontakter
+syfte: >-
+  Vårdpersonal ska få en samlad bild av patientens vårdkontakter och fasta
+  kontakter hos andra vårdgivare, för att kunna planera vården.
+
+aktorer:
+  vardpersonal: Vardpersonal
+  journal: PSKonsument
+  kalla: PSProducent
+
+informationsbehov:
+  vardkontakt: VardkontaktInfo
+  fastkontakt: FastKontaktInfo
+
+steg:
+  - titel: Vårdpersonalen öppnar patientöversikten för patienten
+    fran: vardpersonal
+    till: journal
+
+  - titel: Journalsystemet söker patientens vårdkontakter
+    fran: journal
+    till: kalla
+    operation: search-type
+    hamtar: vardkontakt
+    alternativ:
+      - titel: Källsystemet svarar inte
+        steg:
+          - titel: Journalsystemet visar att informationen kan vara ofullständig
+            fran: journal
+            till: vardpersonal
+            krav: Konsumenten SKA visa att informationen kan vara ofullständig när ett källsystem inte svarar.
+
+  - titel: Journalsystemet söker patientens fasta kontakter
+    fran: journal
+    till: kalla
+    operation: search-type
+    hamtar: fastkontakt
+
+  - titel: Journalsystemet visar vårdkontakter och fasta kontakter
+    fran: journal
+    till: vardpersonal

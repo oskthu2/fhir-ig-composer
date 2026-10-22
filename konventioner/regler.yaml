@@ -58,3 +58,19 @@ aktorer:
   genereraFormagor: true
   # Generera <Aktör>Krav (Requirements) med derivedFrom till förfädernas krav.
   genereraKrav: true
+
+scenarier:
+  # Skissformatet för användningsfall och delflöden, relativt varje IG.
+  katalog: input/scenarier
+  # Federationens flödesmönster vävs in i tjänstens användningsfall.
+  vavning: true
+  # ExampleScenario per användningsfall och delflöde, och Requirements per
+  # användningsfall och deltagande aktör (en sats per steg).
+  genereraKrav: true
+  # Täckningskontroller: fel | varning
+  tackning:
+    aktorUtanDefinition: fel            # rollen finns inte som ActorDefinition
+    informationsbehovUtanModell: fel    # informationsbehovet finns inte som logisk modell
+    informationsbehovUtanProfil: fel    # ingen profil realiserar informationsbehovet
+    rollUtanTjanstaktor: varning        # ingen tjänsteaktör spelar alla roller i en scenarioaktör
+    formagaSaknas: varning              # avsändare/mottagare saknar interaktionen i sina förmågor

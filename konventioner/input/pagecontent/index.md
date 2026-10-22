@@ -29,3 +29,17 @@ Konfiguration sker på tre nivåer, där den mest specifika vinner:
 | `Obligation(kod, aktor)` | Elementkrav per systemroll, t.ex. `* period insert Obligation(#SHALL:populate, PSProducent)`. |
 | `Kompositionsanvisning(inkludering)` | Överstyr inkludering för en artefakt. |
 | `KopieradFran(url)`, `KopieradFranInstans(url)` | Sätts av verktyget på kopierade definitioner. |
+
+#### Kravmodell
+
+Användningsfall och delflöden skrivs i ett skissformat (`input/scenarier/*.yaml`) och kompileras av `ig-composer` till `ExampleScenario` och `Requirements`.
+
+| Begrepp | FHIR | Konvention |
+|---|---|---|
+| Aktör (person eller system) | `ActorDefinition` | [scenario-aktor](StructureDefinition-scenario-aktor.html) binder scenarioaktören till sina roller |
+| Informationsbehov | Logisk modell (`StructureDefinition` kind=logical) | [informationsbehov](StructureDefinition-informationsbehov.html) på scenarioinstansen |
+| Harmonisering | Profil | `* insert Realiserar(Informationsbehov)` sätter [realiserar](StructureDefinition-realiserar.html) |
+| Användningsfall, scenario, delflöde | `ExampleScenario` (processer, steg, alternativ, `step.workflow`) | |
+| Invävning | Federationens [flödesmönster](StructureDefinition-flodesmonster.html) | Invävda steg får [invavd-av](StructureDefinition-invavd-av.html) |
+| Urval i en tjänst | [anvandningsfall](StructureDefinition-anvandningsfall.html) på ImplementationGuide | |
+| Krav per deltagande aktör | `Requirements` med `satisfiedBy` till profil och förmåga | |

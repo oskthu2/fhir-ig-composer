@@ -1,0 +1,18 @@
+# Delflöde som SVOD:s flödesmönster väver in före första hämtningen i varje
+# användningsfall i en SVOD-tjänst. "binder: fran" betyder att aktören är
+# samma deltagare som avsändaren i steget som delflödet vävs in vid.
+delflode: SVODVerifieraPatientrelation
+nyckel: SVOD-PR
+titel: Verifiera patientrelation
+syfte: Säkerställa att användaren har en patientrelation innan information hämtas (PDL 6 kap. 3 §).
+
+aktorer:
+  konsument: { roll: SVODKonsument, binder: fran }
+  tgp: SVODPatientrelationstjanst
+
+steg:
+  - titel: Konsumenten verifierar användarens patientrelation
+    fran: konsument
+    till: tgp
+    operation: search-system
+    krav: Konsumenten SKA verifiera patientrelation innan information hämtas från andra vårdgivare.

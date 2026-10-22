@@ -55,8 +55,11 @@ Description: "Infrastrukturkrav på konsumenter i SVOD."
 * format[0] = #json
 * rest[0].mode = #client
 * rest[=].documentation = "Konsumenten ska verifiera patientrelation (tgp) före åtkomst och tillämpa spärrar baserat på metadata om vårdenhet och vårdgivare."
+* rest[=].interaction[0].code = #search-system
 * rest[=].resource[0].type = #Provenance
 * rest[=].resource[=].interaction[0].code = #search-type
+* rest[=].resource[+].type = #AuditEvent
+* rest[=].resource[=].interaction[0].code = #create
 
 Instance: SVODKallsystemKrav
 InstanceOf: Requirements
@@ -96,3 +99,59 @@ Description: "Regulatoriska krav på konsumenter i SVOD."
 * statement[=].label = "Patientrelation"
 * statement[=].conformance[0] = #SHALL
 * statement[=].requirement = "Konsumenten SKA verifiera patientrelation innan information hämtas."
+
+// Stödtjänster som vävs in i tjänsternas användningsfall via federationens
+// flödesmönster (se input/scenarier).
+Instance: SVODPatientrelationstjanst
+InstanceOf: ActorDefinition
+Usage: #definition
+Title: "SVOD: patientrelationstjänst"
+Description: "Stödtjänst som verifierar att användaren har en patientrelation till patienten."
+* name = "SVODPatientrelationstjanst"
+* title = "SVOD: patientrelationstjänst"
+* status = #draft
+* type = #system
+* capabilities = Canonical(SVODPatientrelationstjanstCS)
+
+Instance: SVODLoggtjanst
+InstanceOf: ActorDefinition
+Usage: #definition
+Title: "SVOD: loggtjänst"
+Description: "Stödtjänst som tar emot åtkomstloggar."
+* name = "SVODLoggtjanst"
+* title = "SVOD: loggtjänst"
+* status = #draft
+* type = #system
+* capabilities = Canonical(SVODLoggtjanstCS)
+
+Instance: SVODPatientrelationstjanstCS
+InstanceOf: CapabilityStatement
+Usage: #definition
+Title: "Förmågor: SVOD, patientrelationstjänst"
+Description: "Förmågor hos patientrelationstjänsten."
+* name = "SVODPatientrelationstjanstCS"
+* title = "Förmågor: SVOD, patientrelationstjänst"
+* status = #draft
+* date = "2026-10-22"
+* kind = #requirements
+* fhirVersion = #5.0.0
+* format[0] = #json
+* rest[0].mode = #server
+* rest[=].documentation = "Verifierar patientrelation för en användare och en patient."
+* rest[=].interaction[0].code = #search-system
+
+Instance: SVODLoggtjanstCS
+InstanceOf: CapabilityStatement
+Usage: #definition
+Title: "Förmågor: SVOD, loggtjänst"
+Description: "Förmågor hos loggtjänsten."
+* name = "SVODLoggtjanstCS"
+* title = "Förmågor: SVOD, loggtjänst"
+* status = #draft
+* date = "2026-10-22"
+* kind = #requirements
+* fhirVersion = #5.0.0
+* format[0] = #json
+* rest[0].mode = #server
+* rest[=].resource[0].type = #AuditEvent
+* rest[=].resource[=].interaction[0].code = #create

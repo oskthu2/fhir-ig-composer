@@ -95,3 +95,77 @@ Description: "Artefaktnivå: överstyr hur just denna artefakt tas med när IG:n
 * ^context[=].expression = "Requirements"
 * value[x] only code
 * valueCode from InkluderingVS (required)
+
+// ---------------------------------------------------------------------------
+// Kravmodell: användningsfall, scenarier och informationsbehov.
+// Användningsfall och delflöden skrivs i skissformatet (input/scenarier/*.yaml)
+// och kompileras av ig-composer till ExampleScenario och Requirements.
+
+Extension: AnvandningsfallExt
+Id: anvandningsfall
+Title: "Användningsfall"
+Description: "Anges på en tjänste-IG: ett användningsfall (namn i skissformatet) som ingår i tjänstens konfiguration. Upprepas för flera."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ImplementationGuide"
+* value[x] only string
+
+Extension: FlodesmonsterExt
+Id: flodesmonster
+Title: "Flödesmönster"
+Description: "Anges på en federations-IG: delflöden som vävs in i varje användningsfall i en tjänst i federationen, före och efter varje steg med någon av de angivna operationstyperna."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ImplementationGuide"
+* extension contains
+    vid 1..* and
+    fore 0..1 and
+    foreEnGang 0..1 and
+    efter 0..1
+* extension[vid].value[x] only code
+* extension[vid] ^short = "Operationstyp (restful-interaction), t.ex. search-type, read"
+* extension[fore].value[x] only string
+* extension[fore] ^short = "Delflöde som vävs in före steget"
+* extension[foreEnGang].value[x] only boolean
+* extension[foreEnGang] ^short = "Väv bara in före-delflödet före första matchande steg"
+* extension[efter].value[x] only string
+* extension[efter] ^short = "Delflöde som vävs in efter steget"
+
+Extension: ScenarioAktorExt
+Id: scenario-aktor
+Title: "Scenarioaktör"
+Description: "Binder en aktör i ett ExampleScenario till den/de systemroller (ActorDefinition) den spelar. Upprepas när en aktör spelar roller från både domän och federation."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ExampleScenario.actor"
+* value[x] only canonical
+* valueCanonical only Canonical(ActorDefinition)
+
+Extension: InformationsbehovExt
+Id: informationsbehov
+Title: "Informationsbehov"
+Description: "Det informationsbehov (logisk modell) som en instans i ett ExampleScenario realiserar."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ExampleScenario.instance"
+* value[x] only canonical
+* valueCanonical only Canonical(StructureDefinition)
+
+Extension: RealiserarExt
+Id: realiserar
+Title: "Realiserar"
+Description: "Profilen realiserar detta informationsbehov (logisk modell). Används av ig-composer för att välja profil för informationsbehoven i ett scenario (harmonisering)."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "StructureDefinition"
+* value[x] only canonical
+* valueCanonical only Canonical(StructureDefinition)
+
+Extension: InvavdAvExt
+Id: invavd-av
+Title: "Invävd av"
+Description: "Sätts av ig-composer på steg i ett ExampleScenario som vävts in av en federations flödesmönster: federationens paket-id."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ExampleScenario.process.step"
+* value[x] only string

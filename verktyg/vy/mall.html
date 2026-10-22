@@ -185,6 +185,32 @@ ul.träd li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .tom { color: var(--svag); padding: 16px 0; }
 .kolumner { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 28px; }
 .fot { margin-top: 28px; font-size: 0.8rem; color: var(--svag); }
+
+/* Sekvensdiagram: en kolumn per scenarioaktör, en rad per steg. */
+.sekvens { display: grid; gap: 0; font-size: 0.86rem; min-width: 640px; }
+.sekvens > div { padding: 6px 8px; }
+.sekvens .bana { text-align: center; border-radius: 8px; background: var(--rb, var(--yta2)); margin: 0 4px 6px; padding: 8px 6px; }
+.sekvens .bana strong { display: block; font-size: 0.85rem; }
+.sekvens .bana .liten { font-size: 0.72rem; color: var(--svag); display: block; }
+.sekvens .steg { border-top: 1px solid var(--kant); }
+.sekvens .steg .nr { font-family: ui-monospace, Menlo, monospace; color: var(--svag); margin-right: 6px; }
+.sekvens .steg .op { display: block; font-size: 0.75rem; color: var(--svag); margin-top: 2px; }
+.sekvens .liv { border-top: 1px solid var(--kant); position: relative; }
+.sekvens .liv::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1.5px dashed var(--kant); }
+.sekvens .pil { position: relative; align-self: center; height: 22px; z-index: 1; pointer-events: none; }
+.sekvens .pil .linje { position: absolute; top: 10px; height: 2px; background: var(--text); }
+.sekvens .pil .linje::after { content: ""; position: absolute; top: -5px; border: 6px solid transparent; }
+.sekvens .pil.höger .linje::after { right: -6px; border-left-color: var(--text); border-right-width: 0; }
+.sekvens .pil.vänster .linje::after { left: -6px; border-right-color: var(--text); border-left-width: 0; }
+.sekvens .pil .själv { position: absolute; top: 2px; left: calc(50% - 2px); width: 26px; height: 16px; border: 2px solid var(--text); border-left: 0; border-radius: 0 8px 8px 0; }
+.sekvens .pil.saknas .linje { background: var(--utelamnat); }
+.sekvens .pil.saknas.höger .linje::after { border-left-color: var(--utelamnat); }
+.sekvens .pil.saknas.vänster .linje::after { border-right-color: var(--utelamnat); }
+.sekvens .invävd, .sekvens .rubrikrad.invävd { background: color-mix(in srgb, var(--federation-bg) 70%, transparent); }
+.sekvens .rubrikrad { border-top: 1px solid var(--kant); font-size: 0.8rem; color: var(--federation); font-weight: 600; padding: 6px 8px; }
+.sekvens .rubrikrad.alt { color: var(--svag); font-weight: 500; font-style: italic; background: none; }
+.ok { color: var(--lokal); } .nej { color: var(--utelamnat); font-weight: 700; }
+.sekvensram { overflow-x: auto; margin: 8px 0 4px; }
 @media (max-width: 560px) {
   main { padding-top: 16px; }
   .panel { padding: 14px; }
@@ -408,7 +434,9 @@ function ritaIg(p, id) {
     ...(m.utelamnat || []).map((a) => ({ ...a, lage: 'utelämnat' })),
   ];
   const diag = m.diagnostik.fel.length + m.diagnostik.varningar.length;
+  const ucs = m.anvandningsfall || [];
   flikar(p, [
+    ucs.length && { id: 'uc', titel: 'Användningsfall', antal: ucs.filter((u) => u.typ === 'anvandningsfall').length, rita: (c) => ritaAnvandningsfall(c, m) },
     m.kravprofiler.length && { id: 'krav', titel: 'Kravprofiler', antal: m.kravprofiler.length, rita: (c) => ritaKrav(c, m) },
     { id: 'art', titel: 'Vad kommer med var', antal: allaArt.length, rita: (c) => ritaArtefakter(c, allaArt) },
     { id: 'prof', titel: 'Exponerade profiler', antal: m.exponerade.length, rita: (c) => ritaProfiler(c, m) },
@@ -493,6 +521,111 @@ function ritaKrav(c, m) {
       ))),
     )) : el('p', { class: 'tom' }, 'Inga verksamhetskrav.'),
   );
+}
+
+// ------------------------------------------------------------------ användningsfall
+function ritaAnvandningsfall(c, m) {
+  const ucs = m.anvandningsfall;
+  const u = ucs.find((x) => x.namn === state.aktor) || ucs[0];
+  c.append(el('div', { class: 'filter', role: 'group', 'aria-label': 'Användningsfall eller delflöde' },
+    ucs.map((x) => el('button', {
+      class: `chip igchip ${x.typ === 'delflode' ? rollKlass(x.paket) : 'r-tjanst'}`, 'aria-pressed': x === u ? 'true' : 'false',
+      onclick: () => { state.aktor = x.namn; skrivHash(); ritaPanel(); },
+    }, x.typ === 'delflode' ? `Delflöde: ${x.titel}` : x.titel))));
+  c.append(
+    el('p', {}, u.syfte || ''),
+    el('p', { class: 'svag liten' }, `${u.typ === 'delflode' ? 'Delflöde' : 'Användningsfall'} `, artLänk(m.ig.id, u.namn), ` · skiss: `, el('code', {}, `${u.fil}`), ` i `, kort(u.paket)),
+  );
+
+  // Sekvensdiagram
+  const banor = u.aktorer;
+  const kol = new Map(banor.map((b, i) => [b.nyckel, i]));
+  const grid = el('div', { class: 'sekvens', style: `grid-template-columns: minmax(190px, 1.6fr) repeat(${banor.length}, minmax(96px, 1fr))` });
+  grid.append(el('div', {}), ...banor.map((b) => el('div', { class: `bana ${b.paket ? rollKlass(b.paket) : ''}` },
+    el('strong', {}, b.titel),
+    el('span', { class: 'liten' }, b.roller.join(' + ')),
+    el('span', { class: 'liten' }, b.typ === 'person' ? 'person' : b.stodtjanst ? 'stödtjänst' : b.spelasAv.length ? `spelas av ${b.spelasAv.join(', ')}` : ''),
+  )));
+  let radNr = 1; // rad 1 är aktörerna
+  const fullbredd = (cls, ...barn) => el('div', { class: cls, style: `grid-column: 1 / ${banor.length + 2}; grid-row: ${++radNr}` }, ...barn);
+  const rad = (st, extra = '') => {
+    const invävd = st.invavd ? ' invävd' : '';
+    if (st.typ === 'delflode') {
+      grid.append(fullbredd(`rubrikrad invävd`, `${st.nr} ↳ invävt från ${kort(st.invavd)}: `, el('button', { class: 'länk', onclick: () => { state.aktor = st.delflode; skrivHash(); ritaPanel(); } }, st.titel)));
+      return;
+    }
+    const tack = st.tackning || {};
+    const märke = (v) => (v === true ? el('span', { class: 'ok', title: 'förmågan finns' }, '✓') : v === false ? el('span', { class: 'nej', title: 'förmågan saknas' }, '✕') : null);
+    const r = ++radNr;
+    grid.append(el('div', { class: `steg${invävd}${extra}`, style: `grid-row: ${r}; grid-column: 1` },
+      el('span', { class: 'nr' }, st.nr), st.titel,
+      st.operation || st.profil || st.resurstyp ? el('span', { class: 'op' },
+        [st.operation, st.profil || st.resurstyp].filter(Boolean).join(' · '),
+        tack.fran !== undefined || tack.till !== undefined ? el('span', {}, '  förmåga ', märke(tack.fran), märke(tack.till)) : null) : null,
+      st.krav ? el('span', { class: 'op' }, `krav: ${st.krav}`) : null,
+    ));
+    banor.forEach((_, i) => grid.append(el('div', { class: `liv${invävd}`, style: `grid-row: ${r}; grid-column: ${i + 2}` })));
+    const a = kol.get(st.fran);
+    const b = kol.get(st.till);
+    if (a === undefined || b === undefined) return;
+    const saknas = tack.fran === false || tack.till === false ? ' saknas' : '';
+    const pil = el('div', { class: `pil ${b >= a ? 'höger' : 'vänster'}${saknas}` });
+    const [min, max] = [Math.min(a, b), Math.max(a, b)];
+    const spann = max - min + 1;
+    pil.style.gridColumn = `${min + 2} / ${max + 3}`;
+    pil.style.gridRow = String(r);
+    if (a === b) pil.append(el('span', { class: 'själv' }));
+    else pil.append(el('span', { class: 'linje', style: `left:${50 / spann}%;right:${50 / spann}%` }));
+    grid.append(pil);
+  };
+  for (const st of u.steg) {
+    rad(st);
+    for (const alt of st.alternativ || []) {
+      grid.append(fullbredd('rubrikrad alt', `Alternativ till ${st.nr}: ${alt.titel}`));
+      for (const as of alt.steg) rad(as, ' alt');
+    }
+  }
+  c.append(el('h3', {}, 'Scenario'), el('div', { class: 'sekvensram' }, grid));
+
+  // Spårbarhet: krav per aktör → steg → informationsbehov → uppfylls av
+  const perId = new Map(m.artefakter.map((a) => [a.id, a]));
+  const uppfylls = (u2) => {
+    const id = u2.split('/').pop();
+    const a = perId.get(id);
+    return a ? el('div', {}, el('button', { class: 'länk', onclick: () => välj('artefakt', `${a.paket}|${a.namn}`) }, a.titel || a.namn)) : el('div', { class: 'mono' }, id);
+  };
+  const bana = (k) => banor.find((b) => b.nyckel === k);
+  const rader = u.krav.flatMap((k) => k.satser.map((sats) => ({ k, sats })));
+  c.append(
+    el('h3', {}, `Spårbarhet (${rader.length} kravsatser)`),
+    rader.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Nyckel', 'Krav', 'Aktör', 'Uppfylls av', 'Källa'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, rader.map(({ k, sats }) => el('tr', {},
+        el('td', { class: 'mono', style: 'white-space:nowrap' }, sats.nyckel),
+        el('td', {}, el('span', { class: `kod ${sats.styrka}` }, sats.styrka), ' ', sats.krav),
+        el('td', {}, bana(k.bana)?.titel || k.bana, bana(k.bana)?.spelasAv.length ? el('div', { class: 'via' }, bana(k.bana).roller.join(' + ')) : null),
+        el('td', {}, sats.satisfiedBy.length ? sats.satisfiedBy.map(uppfylls) : el('span', { class: 'nej' }, 'saknas')),
+        el('td', {}, artLänk(m.ig.id, k.namn)),
+      ))),
+    )) : el('p', { class: 'tom' }, u.typ === 'delflode' && ig(m.ig.id).roll === 'tjanst'
+      ? 'Delflödets krav ingår i de användningsfall det vävs in i.' : 'Inga krav genererade.'),
+  );
+
+  // Täckning
+  const ops = [];
+  const samla = (lista) => { for (const st of lista) { if (st.tackning) ops.push(st); samla((st.alternativ || []).flatMap((a) => a.steg)); } };
+  samla(u.steg);
+  const brister = ops.filter((st) => st.tackning.fran === false || st.tackning.till === false);
+  const ospelade = banor.filter((b) => ig(m.ig.id).roll === 'tjanst' && b.typ === 'system' && !b.stodtjanst && !b.spelasAv.length);
+  const info = (m.anvandningsfall.find((x) => x.namn === u.namn)?.informationsbehov) || [];
+  c.append(el('h3', {}, 'Täckning'), el('ul', {},
+    el('li', {}, info.every((i) => i.profil) ? el('span', { class: 'ok' }, '✓ ') : el('span', { class: 'nej' }, '✕ '),
+      `Informationsbehov: ${info.map((i) => `${i.titel} → ${i.profil || 'ingen profil'}`).join(', ') || 'inga'}`),
+    el('li', {}, brister.length ? el('span', { class: 'nej' }, '✕ ') : el('span', { class: 'ok' }, '✓ '),
+      brister.length ? `Förmåga saknas i steg ${brister.map((b) => b.nr).join(', ')}` : `${ops.length} operationer: avsändare och mottagare har förmågan`),
+    ig(m.ig.id).roll === 'tjanst' ? el('li', {}, ospelade.length ? el('span', { class: 'nej' }, '✕ ') : el('span', { class: 'ok' }, '✓ '),
+      ospelade.length ? `Ingen tjänsteaktör spelar ${ospelade.map((b) => b.titel).join(', ')}` : 'Alla systemaktörer spelas av en tjänsteaktör eller är stödtjänster') : null,
+  ));
 }
 
 function ritaArtefakter(c, rader) {
@@ -596,6 +729,11 @@ function ritaPaket(p, id) {
         el('span', { class: 'via' }, `${u.inkludering}${u.via.length ? ` via ${u.via.map(kort).join(' → ')}` : ', direkt'}`)))) : el('p', { class: 'svag' }, 'Ingen IG komponerar detta paket.'),
     ),
   );
+  if (M[id]?.anvandningsfall?.length) {
+    const c = el('div');
+    p.append(el('h3', {}, 'Användningsfall och delflöden'), c);
+    ritaAnvandningsfall(c, M[id]);
+  }
   p.append(
     el('h3', {}, `Artefakter härifrån (${härifrån.length})`),
     härifrån.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },

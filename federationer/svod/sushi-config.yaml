@@ -30,6 +30,18 @@ extension:
         valueString: SVODMetadata
       - url: profilprefix
         valueString: SVODMetadata
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/flodesmonster
+    extension:
+      - url: vid
+        valueCode: search-type
+      - url: vid
+        valueCode: read
+      - url: fore
+        valueString: SVODVerifieraPatientrelation
+      - url: foreEnGang
+        valueBoolean: true
+      - url: efter
+        valueString: SVODSparrOchLoggning
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
     extension:
       - url: paket
