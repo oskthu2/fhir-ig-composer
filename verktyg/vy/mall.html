@@ -64,6 +64,7 @@
     --shall: #ecebe8;
     --should: #a39e97;
     --skugga: none;
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -73,13 +74,17 @@
   --stodtjanst: #6cc7c3; --stodtjanst-bg: #1c3332;
   --lokal: #6cc38f; --kopierad: #7fb0ec; --genererad: #b597e6; --ruleset: #a9b0ba; --refererad: #d9b77a;
   --utelamnat: #e88480; --shall: #ecebe8; --should: #a39e97; --skugga: none;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+main {
+  max-width: 1180px; margin: 0 auto; padding-block: 24px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
 h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: -0.01em; }
 h2 { font-size: 1.15rem; margin: 0 0 4px; }
 h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--svag); margin: 22px 0 8px; font-weight: 600; }
@@ -313,6 +318,7 @@ const el = (tag, attrs = {}, ...barn) => {
   for (const b of barn.flat()) if (b !== null && b !== undefined && b !== false) e.append(b.nodeType ? b : String(b));
   return e;
 };
+const rörelse = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 const ROLL = { byggblock: 'Byggblock', federation: 'Federation', stodtjanst: 'Stödtjänst', tjanst: 'Tjänst', konvention: 'Konvention' };
 // System i systemregistret (testade mot den mockade federationen) och system
 // härledda ur en verklig T2-realisering (läsadaptern), med sin körning.
@@ -380,7 +386,7 @@ function välj(vy, id, extra = {}) {
   Object.assign(state, { vy, id, flik: null, aktor: null, filter: {}, redigera: null }, extra);
   skrivHash();
   rita();
-  document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('panel').scrollIntoView({ behavior: rörelse(), block: 'start' });
 }
 
 // Vilka IG:ar ska markeras i matrisen för aktuellt val?
@@ -606,7 +612,12 @@ function ritaAnvandningsfall(c, m) {
     el('p', { class: 'svag liten' }, `${u.typ === 'delflode' ? 'Delflöde' : 'Användningsfall'} `, artLänk(m.ig.id, u.namn), ` · skiss: `, el('code', {}, `${u.fil}`), ` i `, kort(u.paket),
       skiss ? el('button', { class: 'knapp', style: 'margin-left:10px', onclick: () => redigera({ typ: 'skiss', ig: skiss.ig, fil: skiss.fil, doc: structuredClone(skiss.doc), tillbaka: { ...state } }) }, 'Redigera skissen') : null),
     mermaid ? el('details', {}, el('summary', { class: 'svag liten' }, 'Mermaid (ur ExampleScenario, samma som på IG:ns sida Användningsfall)'),
-      el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: (e) => { navigator.clipboard?.writeText(mermaid); e.target.textContent = 'Kopierad'; } }, 'Kopiera')),
+      el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: (e) => {
+        const knapp = e.target;
+        const markera = () => { const r = document.createRange(); r.selectNodeContents(knapp.closest('details').querySelector('pre')); getSelection().removeAllRanges(); getSelection().addRange(r); knapp.textContent = 'Markerad – kopiera med Ctrl+C'; };
+        if (!navigator.clipboard) return markera();
+        navigator.clipboard.writeText(mermaid).then(() => { knapp.textContent = 'Kopierad'; }, markera);
+      } }, 'Kopiera')),
       el('pre', { class: 'yaml' }, mermaid)) : null,
   );
 
@@ -1215,7 +1226,7 @@ async function spara(knapp, metod, url, body, nästa) {
     knapp.after(el('div', { class: 'meddelande nej' }, `Kunde inte spara: ${e.message}`));
   }
 }
-function redigera(r) { state.redigera = r; ritaPanel(); document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+function redigera(r) { state.redigera = r; ritaPanel(); document.getElementById('panel').scrollIntoView({ behavior: rörelse(), block: 'start' }); }
 function avbryt() { const t = state.redigera?.tillbaka; state.redigera = null; if (t) Object.assign(state, t, { redigera: null }); rita(); }
 function ritaRedigering(p) {
   const r = state.redigera;
