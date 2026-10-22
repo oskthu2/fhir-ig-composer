@@ -338,9 +338,8 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 └── docker-compose.yml         studio + definitionsregister (HAPI FHIR R5)
 ```
 
-Varje katalog under `konventioner/`, `byggblock/`, `federationer/`, `stodtjanster/` och `tjanster/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon (skapade från `IneraFHIRTemplate`) som komponeras hit via arbetsytan.
+Varje katalog under `konventioner/`, `byggblock/`, `federationer/`, `stodtjanster/` och `tjanster/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon som komponeras hit via arbetsytan, eller läses från definitionsregistret.
 
-Historiken är flyttad från `komposition/` på branchen `claude/trusting-ritchie-k22m87` i `Inera-AB/IneraFHIRTemplate`.
 
 ## Bygga
 
