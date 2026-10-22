@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
-import { loadWorkspace, compose, matrix, postProcess } from './ig-composer.mjs';
+import { loadWorkspace, compose, matrix, postProcess, viewData, renderView } from './ig-composer.mjs';
 import { parseFsh, expandRules } from './fsh.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -142,4 +142,16 @@ test('efterbehandlingen tar bort ärvda obligations ur differentialen', () => {
   const b = JSON.parse(fs.readFileSync(path.join(res, 'StructureDefinition-B.json'), 'utf8'));
   assert.deepEqual(b.differential.element[0].extension, [ob('SHALL:populate', 'b1')]);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('vyn bäddar in data utan att kunna avsluta script-elementet', () => {
+  const data = viewData(ws, root);
+  assert.ok(data.igs.some((i) => i.id === 'inera.tjanst.npo' && i.roll === 'tjanst'));
+  assert.deepEqual(data.matris, matrix(ws).json);
+  data.igs.push({ id: 'x', titel: '</script><script>alert(1)</script>' });
+  const html = renderView(data);
+  assert.ok(!html.includes('/*__DATA__*/null'));
+  assert.equal(html.match(/<\/script>/g).length, 1);
+  const json = html.match(/const DATA = (.*);\n/)[1];
+  assert.equal(JSON.parse(json).igs.at(-1).titel, '</script><script>alert(1)</script>');
 });

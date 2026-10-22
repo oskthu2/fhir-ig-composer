@@ -18,3 +18,6 @@ verktyg/node_modules/
 # Matrisen genereras av ig-composer matris
 matris.md
 matris.json
+
+# Matrisvyn genereras av ig-composer vy
+vy.html

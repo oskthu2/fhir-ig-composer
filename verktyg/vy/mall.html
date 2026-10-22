@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kompositionsmatris</title>
+<!-- Mall för "ig-composer vy". Verktyget ersätter DATA-platshållaren nedan
+     med arbetsytans IG:ar, matrisen och varje IG:s komposition.json. -->
+<style>
+:root {
+  --bg: #f7f6f4;
+  --yta: #ffffff;
+  --yta2: #f0eeeb;
+  --text: #22201e;
+  --svag: #6b6660;
+  --kant: #dedad4;
+  --fokus: #a33a6a;
+  --byggblock: #2f6db5;
+  --byggblock-bg: #e6eef8;
+  --federation: #8a6a2f;
+  --federation-bg: #f3ebdc;
+  --tjanst: #a33a6a;
+  --tjanst-bg: #f6e6ee;
+  --konvention: #5f6670;
+  --konvention-bg: #eceef1;
+  --lokal: #2e7d4f;
+  --kopierad: #2f6db5;
+  --genererad: #7a4fb5;
+  --ruleset: #5f6670;
+  --refererad: #8a6a2f;
+  --utelamnat: #b0413e;
+  --shall: #22201e;
+  --should: #6b6660;
+  --skugga: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 4%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171615;
+    --yta: #201f1d;
+    --yta2: #2a2826;
+    --text: #ecebe8;
+    --svag: #a39e97;
+    --kant: #3a3734;
+    --fokus: #e07aa8;
+    --byggblock: #7fb0ec;
+    --byggblock-bg: #1f2c3c;
+    --federation: #d9b77a;
+    --federation-bg: #352c1d;
+    --tjanst: #e07aa8;
+    --tjanst-bg: #3a2230;
+    --konvention: #a9b0ba;
+    --konvention-bg: #2b2e33;
+    --lokal: #6cc38f;
+    --kopierad: #7fb0ec;
+    --genererad: #b597e6;
+    --ruleset: #a9b0ba;
+    --refererad: #d9b77a;
+    --utelamnat: #e88480;
+    --shall: #ecebe8;
+    --should: #a39e97;
+    --skugga: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171615; --yta: #201f1d; --yta2: #2a2826; --text: #ecebe8; --svag: #a39e97; --kant: #3a3734;
+  --fokus: #e07aa8; --byggblock: #7fb0ec; --byggblock-bg: #1f2c3c; --federation: #d9b77a; --federation-bg: #352c1d;
+  --tjanst: #e07aa8; --tjanst-bg: #3a2230; --konvention: #a9b0ba; --konvention-bg: #2b2e33;
+  --lokal: #6cc38f; --kopierad: #7fb0ec; --genererad: #b597e6; --ruleset: #a9b0ba; --refererad: #d9b77a;
+  --utelamnat: #e88480; --shall: #ecebe8; --should: #a39e97; --skugga: none;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 0 0 4px; }
+h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--svag); margin: 22px 0 8px; font-weight: 600; }
+p { margin: 0 0 8px; }
+.svag { color: var(--svag); }
+.liten { font-size: 0.85rem; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--fokus); outline-offset: 2px; }
+
+header.topp { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+.sok { position: relative; flex: 1 1 320px; max-width: 460px; }
+.sok input {
+  width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--kant);
+  background: var(--yta); color: var(--text); font: inherit;
+}
+.sok ul {
+  position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px;
+  list-style: none; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px;
+  box-shadow: var(--skugga); max-height: 360px; overflow: auto;
+}
+.sok li { padding: 7px 9px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+.sok li[aria-selected="true"], .sok li:hover { background: var(--yta2); }
+.sok li .svag { margin-left: auto; font-size: 0.8rem; white-space: nowrap; }
+
+.kort { background: var(--yta); border: 1px solid var(--kant); border-radius: 12px; box-shadow: var(--skugga); }
+.matrisram { overflow-x: auto; padding: 4px; }
+table.matris { border-collapse: separate; border-spacing: 6px; width: 100%; min-width: 520px; }
+table.matris th, table.matris td { border-radius: 10px; padding: 12px; vertical-align: top; text-align: left; }
+table.matris thead th { background: var(--byggblock-bg); }
+table.matris tbody th { background: var(--federation-bg); width: 22%; }
+table.matris td { background: var(--yta2); min-width: 160px; }
+table.matris .hörn { background: transparent; color: var(--svag); font-weight: 500; font-size: 0.8rem; vertical-align: bottom; }
+.hörn .pil { display: block; }
+.huvud { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; }
+.huvud strong { display: block; }
+.huvud .mono { color: var(--svag); }
+.kandidat {
+  display: block; border: 1.5px dashed var(--kant); border-radius: 8px; padding: 8px 10px;
+  color: var(--svag); font-size: 0.85rem;
+}
+.dimma td .chip:not(.träff), .dimma .huvud:not(.träff), .dimma .igchip:not(.träff) { opacity: 0.35; }
+.huvud.träff strong { text-decoration: underline 2px var(--fokus); text-underline-offset: 3px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 11px;
+  border: 1px solid transparent; background: var(--yta); cursor: pointer; margin: 2px 4px 2px 0;
+  font-size: 0.9rem; line-height: 1.3; text-align: left;
+}
+.chip.tjanst { background: var(--tjanst); color: #fff; font-weight: 600; }
+:root:not([data-theme="light"]) .chip.tjanst { color: #fff; }
+.chip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fokus); }
+.chip.träff { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fokus); }
+.prick { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
+.r-byggblock { --rf: var(--byggblock); --rb: var(--byggblock-bg); }
+.r-federation { --rf: var(--federation); --rb: var(--federation-bg); }
+.r-tjanst { --rf: var(--tjanst); --rb: var(--tjanst-bg); }
+.r-konvention { --rf: var(--konvention); --rb: var(--konvention-bg); }
+.prick { background: var(--rf, var(--svag)); }
+.igchip { background: var(--rb); color: var(--text); border-color: transparent; }
+
+.alla { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 20px; padding: 14px 16px; }
+.alla h3 { margin: 0 0 6px; }
+.förklaring { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--svag); margin: 10px 2px 22px; }
+.förklaring span { display: inline-flex; align-items: center; gap: 6px; }
+
+.panel { padding: 20px; margin-top: 18px; }
+.panelhuvud { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.etiketter { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.etikett { font-size: 0.78rem; padding: 2px 8px; border-radius: 6px; background: var(--yta2); color: var(--svag); }
+.etikett.r { background: var(--rb); color: var(--rf); font-weight: 600; }
+.flikar { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--kant); margin: 16px 0 4px; }
+.flikar button {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; color: var(--svag);
+  margin-bottom: -1px;
+}
+.flikar button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--fokus); font-weight: 600; }
+.flikar .antal { font-size: 0.75rem; background: var(--yta2); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+
+.filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+.filter input[type="search"], .filter select {
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--kant); background: var(--yta); color: var(--text); font: inherit; font-size: 0.9rem;
+}
+.växel {
+  border: 1px solid var(--kant); background: var(--yta); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 0.82rem;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.växel[aria-pressed="false"] { opacity: 0.5; }
+
+.tabellram { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+table.data th { text-align: left; font-weight: 600; color: var(--svag); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 8px 10px; border-bottom: 1px solid var(--kant); white-space: nowrap; }
+table.data td { padding: 7px 10px; border-bottom: 1px solid var(--kant); vertical-align: top; }
+table.data tr.grupp td { background: var(--yta2); font-weight: 600; padding-top: 9px; }
+.länk { background: none; border: 0; padding: 0; color: var(--fokus); cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--fokus) 40%, transparent); text-underline-offset: 2px; }
+
+.läge { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.läge::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--lf); }
+.l-lokal { --lf: var(--lokal); } .l-kopierad { --lf: var(--kopierad); } .l-genererad { --lf: var(--genererad); }
+.l-ruleset, .l-alias { --lf: var(--ruleset); } .l-refererad { --lf: var(--refererad); } .l-utelämnat { --lf: var(--utelamnat); }
+.kod { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; padding: 1px 6px; border-radius: 5px; background: var(--yta2); white-space: nowrap; }
+.kod.SHALL { font-weight: 700; color: var(--shall); }
+.kod.SHOULD, .kod.MAY { color: var(--should); }
+.härkomst { font-size: 0.78rem; color: var(--svag); }
+
+ul.träd { list-style: none; margin: 0; padding: 0; }
+ul.träd li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.via { color: var(--svag); font-size: 0.82rem; }
+.tom { color: var(--svag); padding: 16px 0; }
+.kolumner { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 28px; }
+.fot { margin-top: 28px; font-size: 0.8rem; color: var(--svag); }
+@media (max-width: 560px) {
+  main { padding-top: 16px; }
+  .panel { padding: 14px; }
+  table.matris tbody th { width: auto; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="topp">
+    <div>
+      <h1>Kompositionsmatris</h1>
+      <p class="svag liten" id="undertitel"></p>
+    </div>
+    <div class="sok" role="search">
+      <input id="sok" type="search" placeholder="Sök artefakt, aktör eller paket …" autocomplete="off"
+             aria-label="Sök artefakt, aktör eller paket" aria-controls="sokresultat" aria-expanded="false">
+      <ul id="sokresultat" role="listbox" hidden></ul>
+    </div>
+  </header>
+
+  <section class="kort matrisram" aria-label="Matris federation × domän">
+    <table class="matris" id="matris"></table>
+  </section>
+  <div class="förklaring" id="förklaring"></div>
+
+  <section class="kort alla" id="alla" aria-label="IG:ar i arbetsytan"></section>
+
+  <section class="kort panel" id="panel" aria-live="polite"></section>
+
+  <p class="fot" id="fot"></p>
+</main>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+// ------------------------------------------------------------------ hjälp
+const el = (tag, attrs = {}, ...barn) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const b of barn.flat()) if (b !== null && b !== undefined && b !== false) e.append(b.nodeType ? b : String(b));
+  return e;
+};
+const ROLL = { byggblock: 'Byggblock', federation: 'Federation', tjanst: 'Tjänst', konvention: 'Konvention' };
+const LÄGE = {
+  lokal: 'lokal', kopierad: 'kopierad', genererad: 'genererad', ruleset: 'RuleSet', alias: 'alias',
+  refererad: 'refererad', utelämnat: 'utelämnat',
+};
+const igs = new Map((DATA?.igs || []).map((i) => [i.id, i]));
+const M = DATA?.manifest || {};
+const ig = (id) => igs.get(id) || { id, titel: id };
+const kort = (id) => (ig(id).titel || id).replace(/^(Byggblock|Federation): /, '').split(' – ')[0];
+const rollKlass = (id) => `r-${ig(id).roll || 'okänd'}`;
+const prick = (id) => el('span', { class: `prick ${rollKlass(id)}`, 'aria-hidden': 'true' });
+
+// Var finns ett paket med, och via vad? (paket-id → [{ig, inkludering, via}])
+const användsI = new Map();
+for (const [igId, m] of Object.entries(M)) {
+  for (const p of m.paket) {
+    if (!användsI.has(p.id)) användsI.set(p.id, []);
+    användsI.get(p.id).push({ ig: igId, inkludering: p.inkludering, via: p.via });
+  }
+}
+
+// Artefaktindex: samma artefakt (hemvist + namn) i alla IG:ar där den finns.
+const artefakter = new Map();
+for (const [igId, m] of Object.entries(M)) {
+  const rader = [
+    ...m.artefakter,
+    ...(m.refererat || []).map((a) => ({ ...a, lage: 'refererad' })),
+    ...(m.utelamnat || []).map((a) => ({ ...a, lage: 'utelämnat' })),
+  ];
+  for (const a of rader) {
+    if (a.lage === 'alias') continue;
+    const nyckel = `${a.paket}|${a.namn}`;
+    if (!artefakter.has(nyckel)) artefakter.set(nyckel, { nyckel, namn: a.namn, titel: a.titel, typ: a.typ, paket: a.paket, kopieradFran: a.kopieradFran, finns: [] });
+    artefakter.get(nyckel).finns.push({ ig: igId, lage: a.lage, via: a.via || [], injiceradBas: a.injiceradBas, skal: a.skal });
+  }
+}
+// En artefakt ligger lokalt i sin hemvist även om hemvisten inte har ett eget manifest.
+for (const a of artefakter.values()) {
+  if (!a.finns.some((f) => f.ig === a.paket) && igs.has(a.paket) && !M[a.paket]) a.finns.unshift({ ig: a.paket, lage: 'lokal', via: [] });
+}
+const aktorPaket = new Map();
+for (const a of artefakter.values()) if (a.typ === 'ActorDefinition') aktorPaket.set(a.namn, a.paket);
+
+// ------------------------------------------------------------------ tillstånd
+const state = { vy: null, id: null, flik: null, aktor: null, filter: {} };
+function läsHash() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  state.vy = q.get('vy'); state.id = q.get('id'); state.flik = q.get('flik'); state.aktor = q.get('aktor');
+}
+function skrivHash() {
+  const q = new URLSearchParams();
+  for (const k of ['vy', 'id', 'flik', 'aktor']) if (state[k]) q.set(k, state[k]);
+  history.replaceState(null, '', q.toString() ? `#${q}` : location.pathname);
+}
+function välj(vy, id, extra = {}) {
+  Object.assign(state, { vy, id, flik: null, aktor: null, filter: {} }, extra);
+  skrivHash();
+  rita();
+  document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Vilka IG:ar ska markeras i matrisen för aktuellt val?
+function markerade() {
+  if (!state.id) return null;
+  if (state.vy === 'tjanst') return new Set([state.id]);
+  if (state.vy === 'paket') return new Set([state.id, ...(användsI.get(state.id) || []).map((u) => u.ig)]);
+  if (state.vy === 'artefakt') return new Set((artefakter.get(state.id)?.finns || []).filter((f) => f.lage !== 'utelämnat').map((f) => f.ig));
+  return null;
+}
+
+// ------------------------------------------------------------------ matris
+function ritaMatris() {
+  const träff = markerade();
+  const t = document.getElementById('matris');
+  t.replaceChildren();
+  t.classList.toggle('dimma', !!träff);
+  const { domaner = [], rader = [] } = DATA.matris || {};
+  const huvudknapp = (id) => el('button', {
+    class: `huvud${träff?.has(id) ? ' träff' : ''}`, onclick: () => välj('paket', id),
+    title: `Visa ${ig(id).titel}`,
+  }, el('strong', {}, kort(id)), el('span', { class: 'mono' }, id));
+  t.append(el('thead', {}, el('tr', {},
+    el('th', { class: 'hörn', scope: 'col' }, el('span', { class: 'pil' }, 'Domän →'), 'Federation ↓'),
+    domaner.map((d) => el('th', { scope: 'col' }, huvudknapp(d))),
+  )));
+  t.append(el('tbody', {}, rader.map((r) => el('tr', {},
+    el('th', { scope: 'row' }, huvudknapp(r.federation)),
+    r.celler.map((c) => el('td', {}, c.tjanster.length
+      ? c.tjanster.map((tj) => el('button', {
+        class: `chip tjanst${träff?.has(tj) ? ' träff' : ''}`,
+        'aria-pressed': state.vy === 'tjanst' && state.id === tj ? 'true' : 'false',
+        onclick: () => välj('tjanst', tj),
+      }, kort(tj)))
+      : el('span', { class: 'kandidat' }, 'kandidat'))),
+  ))));
+}
+
+function ritaAlla() {
+  const träff = markerade();
+  const s = document.getElementById('alla');
+  s.replaceChildren();
+  s.classList.toggle('dimma', !!träff);
+  for (const roll of ['tjanst', 'byggblock', 'federation', 'konvention']) {
+    const lista = [...igs.values()].filter((i) => i.roll === roll);
+    if (!lista.length) continue;
+    s.append(el('div', {},
+      el('h3', {}, { tjanst: 'Tjänster', byggblock: 'Byggblock', federation: 'Federationer', konvention: 'Konventioner' }[roll]),
+      lista.map((i) => el('button', {
+        class: `chip igchip ${rollKlass(i.id)}${träff?.has(i.id) ? ' träff' : ''}`,
+        'aria-pressed': state.id === i.id ? 'true' : 'false',
+        onclick: () => välj(roll === 'tjanst' ? 'tjanst' : 'paket', i.id),
+        title: i.id,
+      }, prick(i.id), kort(i.id), i.publicering === 'intern' ? el('span', { class: 'svag liten' }, 'intern') : null)),
+    ));
+  }
+}
+
+function ritaFörklaring() {
+  const f = document.getElementById('förklaring');
+  f.replaceChildren(
+    ...['byggblock', 'federation', 'tjanst', 'konvention'].map((r) => el('span', {}, el('span', { class: `prick r-${r}` }), ROLL[r])),
+    el('span', {}, '·'),
+    ...['lokal', 'kopierad', 'genererad', 'refererad', 'utelämnat'].map((l) => el('span', { class: `läge l-${l}` }, LÄGE[l])),
+  );
+}
+
+// ------------------------------------------------------------------ paneler
+function ritaPanel() {
+  const p = document.getElementById('panel');
+  p.replaceChildren();
+  if (state.vy === 'tjanst' || (state.vy === 'paket' && M[state.id] && ig(state.id).roll === 'tjanst')) return ritaIg(p, state.id);
+  if (state.vy === 'paket') return ritaPaket(p, state.id);
+  if (state.vy === 'artefakt') return ritaArtefakt(p, state.id);
+  p.append(
+    el('h2', {}, 'Välj en tjänst, ett paket eller en artefakt'),
+    el('p', { class: 'svag' }, 'Klicka på en tjänst i matrisen för dess kravprofiler per systemroll och vad som kommer med varifrån. Klicka på en domän eller federation för att se var den används. Sök efter en artefakt för att se i vilka IG:ar den finns.'),
+  );
+}
+
+function igHuvud(id) {
+  const i = ig(id);
+  return el('div', {},
+    el('div', { class: 'panelhuvud' }, el('h2', {}, i.titel), el('span', { class: 'mono svag' }, `${id}#${i.version || '?'}`)),
+    el('div', { class: 'etiketter' },
+      el('span', { class: `etikett r ${rollKlass(id)}` }, ROLL[i.roll] || i.roll || 'okänd roll'),
+      i.publicering ? el('span', { class: 'etikett' }, i.publicering) : null,
+      i.katalog ? el('span', { class: 'etikett mono' }, i.katalog) : null,
+    ),
+  );
+}
+
+function flikar(p, lista) {
+  const aktiv = lista.find((f) => f.id === state.flik) || lista[0];
+  const rad = el('div', { class: 'flikar', role: 'tablist' }, lista.map((f) => el('button', {
+    role: 'tab', 'aria-selected': f === aktiv ? 'true' : 'false',
+    onclick: () => { state.flik = f.id; skrivHash(); ritaPanel(); },
+  }, f.titel, f.antal !== undefined ? el('span', { class: 'antal' }, f.antal) : null)));
+  const innehåll = el('div', { role: 'tabpanel' });
+  p.append(rad, innehåll);
+  aktiv.rita(innehåll);
+}
+
+function ritaIg(p, id) {
+  p.append(igHuvud(id));
+  const m = M[id];
+  if (!m) {
+    p.append(el('p', { class: 'tom' }, 'Ingen komposition.json för denna IG. Kör ', el('code', {}, 'ig-composer bygg'), ' och sedan ', el('code', {}, 'ig-composer vy'), '.'));
+    return;
+  }
+  const allaArt = [
+    ...m.artefakter.filter((a) => a.lage !== 'alias'),
+    ...(m.refererat || []).map((a) => ({ ...a, lage: 'refererad' })),
+    ...(m.utelamnat || []).map((a) => ({ ...a, lage: 'utelämnat' })),
+  ];
+  const diag = m.diagnostik.fel.length + m.diagnostik.varningar.length;
+  flikar(p, [
+    m.kravprofiler.length && { id: 'krav', titel: 'Kravprofiler', antal: m.kravprofiler.length, rita: (c) => ritaKrav(c, m) },
+    { id: 'art', titel: 'Vad kommer med var', antal: allaArt.length, rita: (c) => ritaArtefakter(c, allaArt) },
+    { id: 'prof', titel: 'Exponerade profiler', antal: m.exponerade.length, rita: (c) => ritaProfiler(c, m) },
+    { id: 'paket', titel: 'Komponerade paket', antal: m.paket.length, rita: (c) => ritaKomponerade(c, m) },
+    { id: 'diag', titel: 'Diagnostik', antal: diag, rita: (c) => ritaDiagnostik(c, m) },
+  ].filter(Boolean));
+}
+
+function ritaKrav(c, m) {
+  const k = m.kravprofiler.find((x) => x.aktor === state.aktor) || m.kravprofiler[0];
+  c.append(el('div', { class: 'filter', role: 'group', 'aria-label': 'Systemroll' },
+    m.kravprofiler.map((x) => el('button', {
+      class: 'chip igchip r-tjanst', 'aria-pressed': x === k ? 'true' : 'false',
+      onclick: () => { state.aktor = x.aktor; skrivHash(); ritaPanel(); },
+    }, x.aktorTitel || x.aktor))));
+
+  c.append(el('div', { class: 'kolumner' },
+    el('div', {},
+      el('h3', {}, 'Härleds från'),
+      el('ul', { class: 'träd' },
+        el('li', {}, prick(m.ig.id), el('strong', {}, k.aktorTitel || k.aktor), el('span', { class: 'mono svag' }, k.aktor)),
+        k.forfader.map((f) => el('li', { style: `padding-left:${f.djup * 20}px` },
+          el('span', { class: 'svag', 'aria-hidden': 'true' }, '↳'),
+          f.paket ? prick(f.paket) : null,
+          aktörLänk(f.namn, f.titel),
+          f.paket ? el('button', { class: 'länk via', onclick: () => välj('paket', f.paket) }, kort(f.paket)) : el('span', { class: 'via' }, 'extern'),
+        )),
+      ),
+    ),
+    el('div', {},
+      el('h3', {}, 'Förmågor'),
+      k.formagor ? el('p', {}, artLänk(m.ig.id, k.formagor), ' importerar:') : el('p', { class: 'svag' }, 'Inga genererade förmågor.'),
+      el('div', {}, k.importerar.map((cs) => el('span', { class: 'etikett mono', style: 'margin:0 6px 6px 0;display:inline-block' }, cs))),
+    ),
+  ));
+
+  // Elementkrav, grupperade per profil, filtrerbara per aktör.
+  const aktörer = [...new Set(k.element.map((o) => o.aktor))];
+  const filterNyckel = `aktorer:${k.aktor}`;
+  const av = state.filter[filterNyckel] || new Set(aktörer);
+  state.filter[filterNyckel] = av;
+  const prof = new Map(m.exponerade.map((x) => [x.profil, x]));
+  const härkomst = (o) => {
+    if (o.definieratI === o.profil) return 'egen';
+    if (prof.get(o.profil)?.baser.includes(o.definieratI)) return `bas: ${o.definieratI}`;
+    return `ärvd från ${o.definieratI}`;
+  };
+  const rader = k.element.filter((o) => av.has(o.aktor));
+  const grupper = new Map();
+  for (const o of rader) { if (!grupper.has(o.profil)) grupper.set(o.profil, []); grupper.get(o.profil).push(o); }
+  c.append(
+    el('h3', {}, `Elementkrav (${rader.length})`),
+    el('div', { class: 'filter', role: 'group', 'aria-label': 'Filtrera på aktör' },
+      el('span', { class: 'svag liten' }, 'Från aktör:'),
+      aktörer.map((a) => el('button', {
+        class: 'växel', 'aria-pressed': av.has(a) ? 'true' : 'false',
+        onclick: () => { av.has(a) ? av.delete(a) : av.add(a); ritaPanel(); },
+      }, aktorPaket.get(a) ? prick(aktorPaket.get(a)) : null, a))),
+    rader.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Element', 'Krav', 'Från aktör', 'Definierat'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, [...grupper].flatMap(([profil, os]) => [
+        el('tr', { class: 'grupp' }, el('td', { colspan: 4 }, profil)),
+        ...os.map((o) => el('tr', {},
+          el('td', { class: 'mono' }, o.element),
+          el('td', {}, el('span', { class: `kod ${o.kod.split(':')[0]}` }, o.kod)),
+          el('td', {}, aktorPaket.get(o.aktor) ? prick(aktorPaket.get(o.aktor)) : null, ' ', aktörLänk(o.aktor)),
+          el('td', { class: 'härkomst' }, härkomst(o)),
+        )),
+      ])),
+    )) : el('p', { class: 'tom' }, 'Inga elementkrav för valda aktörer.'),
+  );
+
+  c.append(
+    el('h3', {}, `Verksamhetskrav (${k.krav.length})`),
+    k.krav.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Nyckel', 'Krav', 'Styrka', 'Källa'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, k.krav.map((r) => el('tr', {},
+        el('td', { class: 'mono', style: 'white-space:nowrap' }, r.nyckel),
+        el('td', {}, r.krav),
+        el('td', {}, r.styrka.map((s) => el('span', { class: `kod ${s}` }, s))),
+        el('td', {}, artLänk(m.ig.id, r.kalla)),
+      ))),
+    )) : el('p', { class: 'tom' }, 'Inga verksamhetskrav.'),
+  );
+}
+
+function ritaArtefakter(c, rader) {
+  const f = state.filter;
+  const lägen = [...new Set(rader.map((a) => a.lage))];
+  f.lägen ||= new Set(lägen);
+  const paket = [...new Set(rader.map((a) => a.paket))];
+  const rita = () => {
+    const q = (f.text || '').toLowerCase();
+    const urval = rader.filter((a) => f.lägen.has(a.lage) && (!f.paket || a.paket === f.paket)
+      && (!q || `${a.namn} ${a.titel} ${a.typ}`.toLowerCase().includes(q)));
+    tbody.replaceChildren(...urval.map((a) => el('tr', {},
+      el('td', {}, el('button', { class: 'länk', onclick: () => välj('artefakt', `${a.paket}|${a.namn}`) }, a.titel || a.namn),
+        a.titel && a.titel !== a.namn ? el('div', { class: 'mono svag' }, a.namn) : null),
+      el('td', { class: 'liten' }, a.typ),
+      el('td', {}, prick(a.paket), ' ', el('button', { class: 'länk', onclick: () => välj('paket', a.paket) }, kort(a.paket))),
+      el('td', {}, el('span', { class: `läge l-${a.lage}` }, LÄGE[a.lage] || a.lage),
+        a.injiceradBas ? el('div', { class: 'härkomst' }, `+ Bas(${a.injiceradBas})`) : null,
+        a.skal ? el('div', { class: 'härkomst' }, a.skal) : null),
+      el('td', { class: 'via' }, a.via?.length ? a.via.map(kort).join(' → ') : '–'),
+    )));
+    räkning.textContent = `${urval.length} av ${rader.length}`;
+  };
+  const tbody = el('tbody');
+  const räkning = el('span', { class: 'svag liten' });
+  c.append(
+    el('div', { class: 'filter' },
+      el('input', { type: 'search', placeholder: 'Filtrera …', value: f.text || '', 'aria-label': 'Filtrera artefakter', oninput: (e) => { f.text = e.target.value; rita(); } }),
+      el('select', { 'aria-label': 'Ursprungspaket', onchange: (e) => { f.paket = e.target.value || null; rita(); } },
+        el('option', { value: '' }, 'Alla paket'),
+        paket.map((id) => el('option', { value: id, selected: f.paket === id }, kort(id)))),
+      lägen.map((l) => el('button', {
+        class: 'växel', 'aria-pressed': f.lägen.has(l) ? 'true' : 'false',
+        onclick: (e) => { f.lägen.has(l) ? f.lägen.delete(l) : f.lägen.add(l); e.currentTarget.setAttribute('aria-pressed', f.lägen.has(l)); rita(); },
+      }, el('span', { class: `läge l-${l}` }, `${LÄGE[l] || l} ${rader.filter((a) => a.lage === l).length}`))),
+      räkning,
+    ),
+    el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Artefakt', 'Typ', 'Ursprung', 'Läge', 'Via'].map((h) => el('th', {}, h)))),
+      tbody)),
+  );
+  rita();
+}
+
+function ritaProfiler(c, m) {
+  if (!m.exponerade.length) return c.append(el('p', { class: 'tom' }, 'IG:n exponerar inga profiler.'));
+  const art = new Map(m.artefakter.map((a) => [a.namn, a]));
+  c.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, ['Profil', 'Resurstyp', 'Parent', 'Ytterligare baser', 'Ursprung'].map((h) => el('th', {}, h)))),
+    el('tbody', {}, m.exponerade.map((x) => {
+      const a = art.get(x.profil);
+      return el('tr', {},
+        el('td', {}, artLänk(m.ig.id, x.profil)),
+        el('td', {}, x.resurstyp),
+        el('td', {}, art.has(x.parent) ? artLänk(m.ig.id, x.parent) : el('span', { class: 'mono' }, x.parent)),
+        el('td', {}, x.baser.length ? x.baser.map((b) => el('div', {}, artLänk(m.ig.id, b))) : '–'),
+        el('td', {}, a ? el('span', { class: `läge l-${a.lage}` }, LÄGE[a.lage]) : '', a && a.paket !== m.ig.id ? el('div', { class: 'via' }, kort(a.paket)) : null),
+      );
+    })),
+  )));
+}
+
+function ritaKomponerade(c, m) {
+  c.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, ['Paket', 'Roll', 'Inkludering', 'Via'].map((h) => el('th', {}, h)))),
+    el('tbody', {}, m.paket.map((p) => el('tr', {},
+      el('td', {}, prick(p.id), ' ', el('button', { class: 'länk', onclick: () => välj('paket', p.id) }, ig(p.id).titel || p.id),
+        el('div', { class: 'mono svag' }, `${p.id}#${p.version}`)),
+      el('td', {}, ROLL[p.roll] || p.roll),
+      el('td', {}, p.inkludering),
+      el('td', { class: 'via' }, p.via.length ? p.via.map(kort).join(' → ') : 'direkt'),
+    ))),
+  )));
+}
+
+function ritaDiagnostik(c, m) {
+  const { fel, varningar } = m.diagnostik;
+  if (!fel.length && !varningar.length) return c.append(el('p', { class: 'tom' }, 'Inga fel eller varningar från ig-composer.'));
+  c.append(
+    fel.length ? el('div', {}, el('h3', {}, `Fel (${fel.length})`), el('ul', {}, fel.map((f) => el('li', {}, f)))) : null,
+    varningar.length ? el('div', {}, el('h3', {}, `Varningar (${varningar.length})`), el('ul', {}, varningar.map((f) => el('li', {}, f)))) : null,
+  );
+}
+
+function ritaPaket(p, id) {
+  p.append(igHuvud(id));
+  const i = ig(id);
+  const användning = användsI.get(id) || [];
+  const härifrån = [...artefakter.values()].filter((a) => a.paket === id);
+  c2(p,
+    el('div', {},
+      el('h3', {}, 'Komponerar'),
+      i.komponerar?.length ? el('ul', { class: 'träd' }, i.komponerar.map((k) => el('li', {}, prick(k.paket),
+        el('button', { class: 'länk', onclick: () => välj('paket', k.paket) }, ig(k.paket).titel || k.paket),
+        el('span', { class: 'via' }, k.inkludering ? `${k.version}, ${k.inkludering}` : k.version)))) : el('p', { class: 'svag' }, 'Inget.'),
+    ),
+    el('div', {},
+      el('h3', {}, `Används i (${användning.length})`),
+      användning.length ? el('ul', { class: 'träd' }, användning.map((u) => el('li', {}, prick(u.ig),
+        el('button', { class: 'länk', onclick: () => välj(ig(u.ig).roll === 'tjanst' ? 'tjanst' : 'paket', u.ig) }, kort(u.ig)),
+        el('span', { class: 'via' }, `${u.inkludering}${u.via.length ? ` via ${u.via.map(kort).join(' → ')}` : ', direkt'}`)))) : el('p', { class: 'svag' }, 'Ingen IG komponerar detta paket.'),
+    ),
+  );
+  p.append(
+    el('h3', {}, `Artefakter härifrån (${härifrån.length})`),
+    härifrån.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Artefakt', 'Typ', 'Finns i'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, härifrån.map((a) => el('tr', {},
+        el('td', {}, el('button', { class: 'länk', onclick: () => välj('artefakt', a.nyckel) }, a.titel || a.namn)),
+        el('td', { class: 'liten' }, a.typ),
+        el('td', {}, a.finns.map((f) => el('span', { style: 'display:inline-flex;gap:4px;margin-right:12px', class: `läge l-${f.lage}` }, kort(f.ig)))),
+      ))),
+    )) : el('p', { class: 'tom' }, 'Inga artefakter från detta paket finns i någon komposition.json.'),
+  );
+}
+
+function ritaArtefakt(p, nyckel) {
+  const a = artefakter.get(nyckel);
+  if (!a) return p.append(el('p', { class: 'tom' }, `Hittar inte ${nyckel}.`));
+  p.append(
+    el('div', { class: 'panelhuvud' }, el('h2', {}, a.titel || a.namn), el('span', { class: 'mono svag' }, a.namn)),
+    el('div', { class: 'etiketter' },
+      el('span', { class: 'etikett' }, a.typ),
+      el('span', { class: `etikett r ${rollKlass(a.paket)}` }, 'hemvist: ', kort(a.paket)),
+      a.kopieradFran ? el('span', { class: 'etikett mono' }, a.kopieradFran) : null),
+    el('h3', {}, `Finns i (${a.finns.length})`),
+    el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['IG', 'Läge', 'Via'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, a.finns.map((f) => el('tr', {},
+        el('td', {}, prick(f.ig), ' ', el('button', { class: 'länk', onclick: () => välj(ig(f.ig).roll === 'tjanst' ? 'tjanst' : 'paket', f.ig) }, ig(f.ig).titel || f.ig)),
+        el('td', {}, el('span', { class: `läge l-${f.lage}` }, LÄGE[f.lage] || f.lage),
+          f.injiceradBas ? el('div', { class: 'härkomst' }, `+ Bas(${f.injiceradBas})`) : null,
+          f.skal ? el('div', { class: 'härkomst' }, f.skal) : null),
+        el('td', { class: 'via' }, f.via.length ? f.via.map(kort).join(' → ') : '–'),
+      ))),
+    )),
+  );
+}
+
+function c2(p, ...delar) { p.append(el('div', { class: 'kolumner' }, delar)); }
+function artLänk(igId, namn) {
+  const a = (M[igId]?.artefakter || []).find((x) => x.namn === namn);
+  if (!a) return el('span', { class: 'mono' }, namn);
+  return el('button', { class: 'länk', onclick: () => välj('artefakt', `${a.paket}|${a.namn}`) }, a.titel || a.namn);
+}
+function aktörLänk(namn, titel) {
+  const paket = aktorPaket.get(namn);
+  if (!paket) return el('span', { class: 'mono' }, titel || namn);
+  return el('button', { class: 'länk', onclick: () => välj('artefakt', `${paket}|${namn}`), title: namn }, titel || namn);
+}
+
+// ------------------------------------------------------------------ sök
+const sökfält = document.getElementById('sok');
+const sökLista = document.getElementById('sokresultat');
+let träffar = [];
+let markör = -1;
+function sök(q) {
+  q = q.trim().toLowerCase();
+  if (!q) return [];
+  const ut = [];
+  for (const i of igs.values()) {
+    if (`${i.id} ${i.titel}`.toLowerCase().includes(q)) ut.push({ etikett: i.titel, typ: 'IG', info: ROLL[i.roll] || 'IG', roll: i.id, gå: () => välj(i.roll === 'tjanst' ? 'tjanst' : 'paket', i.id) });
+  }
+  for (const a of artefakter.values()) {
+    if (`${a.namn} ${a.titel || ''}`.toLowerCase().includes(q)) {
+      ut.push({ etikett: a.titel || a.namn, typ: a.typ, info: `${a.typ} · ${a.finns.length} IG`, roll: a.paket, gå: () => välj('artefakt', a.nyckel) });
+    }
+  }
+  // Exakt träff före början-träff före övriga; därefter IG:ar, profiler och aktörer före annat.
+  const TYP = { IG: 0, Profile: 1, ActorDefinition: 2, Extension: 3, Requirements: 4, CapabilityStatement: 5 };
+  const rang = (t) => {
+    const e = t.etikett.toLowerCase();
+    return [e === q ? 0 : e.startsWith(q) ? 1 : 2, TYP[t.typ] ?? 9, e];
+  };
+  return ut
+    .sort((a, b) => { const [x, y] = [rang(a), rang(b)]; return x[0] - y[0] || x[1] - y[1] || x[2].localeCompare(y[2], 'sv'); })
+    .slice(0, 14);
+}
+function visaTräffar() {
+  sökLista.replaceChildren(...träffar.map((t, n) => el('li', {
+    role: 'option', id: `tr${n}`, 'aria-selected': n === markör ? 'true' : 'false',
+    onmousedown: (e) => { e.preventDefault(); t.gå(); stängSök(); },
+  }, prick(t.roll), t.etikett, el('span', { class: 'svag' }, t.info))));
+  sökLista.hidden = !träffar.length;
+  sökfält.setAttribute('aria-expanded', String(!!träffar.length));
+  sökfält.setAttribute('aria-activedescendant', markör >= 0 ? `tr${markör}` : '');
+}
+function stängSök() { träffar = []; markör = -1; visaTräffar(); }
+sökfält.addEventListener('input', () => { träffar = sök(sökfält.value); markör = träffar.length ? 0 : -1; visaTräffar(); });
+sökfält.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' && träffar.length) { markör = (markör + 1) % träffar.length; visaTräffar(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp' && träffar.length) { markör = (markör - 1 + träffar.length) % träffar.length; visaTräffar(); e.preventDefault(); }
+  else if (e.key === 'Enter' && markör >= 0) { träffar[markör].gå(); stängSök(); }
+  else if (e.key === 'Escape') { stängSök(); }
+});
+sökfält.addEventListener('blur', () => setTimeout(stängSök, 100));
+
+// ------------------------------------------------------------------ start
+function rita() { ritaMatris(); ritaAlla(); ritaPanel(); }
+function start() {
+  if (!DATA) {
+    document.getElementById('panel').append(el('p', {}, 'Ingen data. Sidan genereras med ', el('code', {}, 'ig-composer vy'), '.'));
+    return;
+  }
+  const antal = Object.keys(M).length;
+  document.getElementById('undertitel').textContent =
+    `Federation × domän · ${igs.size} IG:ar, ${antal} med komposition.json · genererad ${new Date(DATA.genererad).toLocaleString('sv-SE')}`;
+  const saknas = [...igs.values()].filter((i) => i.komponerar?.length && !M[i.id]).map((i) => i.id);
+  document.getElementById('fot').textContent = saknas.length
+    ? `Saknar komposition.json: ${saknas.join(', ')}. Kör ig-composer bygg före ig-composer vy.`
+    : 'Data från varje IG:s komposition.json, framtagen av ig-composer.';
+  ritaFörklaring();
+  läsHash();
+  rita();
+}
+window.addEventListener('hashchange', () => { läsHash(); rita(); });
+start();
+</script>
+</body>
+</html>

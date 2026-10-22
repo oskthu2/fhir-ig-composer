@@ -17,6 +17,21 @@ Tjänster i prototypen:
 
 (`node verktyg/ig-composer.mjs matris` tar fram matrisen ur IG:arna.)
 
+## Interaktiv matrisvy
+
+```sh
+node verktyg/ig-composer.mjs bygg   # skriver komposition.json i varje IG
+node verktyg/ig-composer.mjs vy     # skriver vy.html
+```
+
+`vy.html` är en fristående sida (ingen server, inga externa beroenden) som läser in alla IG:ars `komposition.json`. CI laddar upp den som byggartefakten *matrisvy*. I vyn kan man:
+
+- klicka på en **tjänst** i matrisen för dess kravprofiler per systemroll (härledning, förmågor, elementkrav filtrerbara per aktör med egen/ärvd/bas-härkomst, verksamhetskrav), vad som kommer med varifrån, exponerade profiler, komponerade paket och diagnostik;
+- klicka på en **domän, federation eller ett byggblock** för var det används (direkt eller via andra byggblock) och vilka av dess artefakter som finns i vilka IG:ar – underlag för konsekvensanalys vid versionsbyte;
+- **söka** efter en artefakt, aktör eller ett paket och se alla IG:ar där den finns, med läge (lokal, kopierad, genererad, refererad, utelämnat) och kedja.
+
+Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
+
 ```
 .
 ├── konventioner/              inera.build.conventions  (konvention, publik)

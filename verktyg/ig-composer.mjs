@@ -8,6 +8,7 @@
 //   ig-composer bygg                        allt ovan + SUSHI för alla IG:ar
 //   ig-composer installera <ig-katalog>     lägg SUSHI-resultatet i lokal FHIR-cache
 //   ig-composer matris                      skriv matrisen federation × domän
+//   ig-composer vy                          skriv vy.html: interaktiv matris från komposition.json
 //
 // IG Publisher körs därefter med -no-sushi, så att efterbehandlingen står kvar.
 //
@@ -585,9 +586,15 @@ function originText(e) {
   return `${e.origin.lage} från ${code(e.origin.paket)}`;
 }
 
+function titleOf(e) {
+  const rule = ruleLines(e).find((r) => /^title\s*=/.test(r));
+  return e.meta.Title || rule?.replace(/^title\s*=\s*"(.*)"$/, '$1') || e.name;
+}
+
 function manifest(r) {
   const art = (e) => ({
     namn: e.name,
+    titel: titleOf(e),
     id: e.id,
     typ: e.kind === 'Instance' ? e.meta.InstanceOf : e.kind,
     paket: e.origin.paket,
@@ -597,8 +604,10 @@ function manifest(r) {
     injiceradBas: e.origin.injiceradBas,
   });
   return {
-    ig: { id: r.ig.id, version: r.ig.version, roll: r.ig.roll, publicering: r.ig.publicering },
-    paket: r.plan.map((p) => ({ id: p.ig.id, version: p.ig.version, roll: p.ig.roll, inkludering: p.mode, via: p.via })),
+    ig: { id: r.ig.id, titel: r.ig.title, version: r.ig.version, roll: r.ig.roll, publicering: r.ig.publicering },
+    paket: r.plan.map((p) => ({
+      id: p.ig.id, titel: p.ig.title, version: p.ig.version, roll: p.ig.roll, inkludering: p.mode, via: p.via,
+    })),
     artefakter: [...r.local, ...r.copied, ...r.generated].filter((e) => e.kind !== 'Alias').map(art),
     refererat: r.refererat.map(art),
     utelamnat: r.utelamnat.map((u) => ({ ...art(u.e), skal: u.skal })),
@@ -607,7 +616,8 @@ function manifest(r) {
     })),
     kravprofiler: r.kravprofiler.map((k) => ({
       aktor: k.aktor.name,
-      forfader: k.forfader.map((f) => ({ namn: f.name, paket: f.actor?.entity.origin.paket, djup: f.depth })),
+      aktorTitel: k.aktor.title,
+      forfader: k.forfader.map((f) => ({ namn: f.name, titel: f.actor?.title, paket: f.actor?.entity.origin.paket, djup: f.depth })),
       formagor: k.formagor?.name,
       importerar: k.formagor?.imports || [],
       element: k.element.map((o) => ({ profil: o.profil.name, element: o.element, kod: o.kod, aktor: o.aktor, definieratI: o.kalla.name })),
@@ -640,6 +650,38 @@ export function matrix(ws) {
     ...cells.map((row) => `| ${ws.get(row.federation).title} | ${row.celler.map((c) => c.tjanster.map((t) => ws.get(t).title).join('<br>') || 'kandidat').join(' | ')} |`),
   ].join('\n');
   return { json: { domaner, rader: cells }, md: md + '\n' };
+}
+
+// ---------------------------------------------------------------- vy
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+// Data till den interaktiva matrisvyn: arbetsytans IG:ar, matrisen och varje
+// IG:s komposition.json (som skrivs av komponera/bygg).
+export function viewData(ws, root) {
+  const manifest = {};
+  for (const ig of ws.values()) {
+    const file = path.join(ig.dir, OUT_MANIFEST);
+    if (fs.existsSync(file)) manifest[ig.id] = JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
+  return {
+    genererad: new Date().toISOString(),
+    igs: [...ws.values()].map((ig) => ({
+      id: ig.id, titel: ig.title, version: ig.version, roll: ig.roll, publicering: ig.publicering,
+      katalog: path.relative(root, ig.dir), komponerar: ig.komponerar,
+    })),
+    matris: matrix(ws).json,
+    manifest,
+  };
+}
+
+// Lägger in datat i mallen. "<" escapas så att data aldrig kan avsluta
+// script-elementet.
+export function renderView(data) {
+  const mall = fs.readFileSync(path.join(HERE, 'vy', 'mall.html'), 'utf8');
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+  if (!mall.includes('/*__DATA__*/null')) throw new Error('Mallen saknar platshållaren /*__DATA__*/null');
+  return mall.replace('/*__DATA__*/null', () => json);
 }
 
 // ---------------------------------------------------------------- efterbehandling
@@ -798,6 +840,15 @@ function main(argv) {
     console.log(md);
     return 0;
   }
+  if (cmd === 'vy') {
+    const data = viewData(ws, root);
+    const saknas = [...ws.values()].filter((ig) => ig.komponerar.length && !data.manifest[ig.id]).map((ig) => ig.id);
+    if (saknas.length) console.warn(`varning: saknar komposition.json för ${saknas.join(', ')} – kör bygg först`);
+    const file = path.join(root, 'vy.html');
+    fs.writeFileSync(file, renderView(data));
+    console.log(`Skrev ${file} (${Object.keys(data.manifest).length} IG:ar med komposition.json)`);
+    return 0;
+  }
   if (cmd === 'bygg') {
     const rules = loadRules(ws);
     // Publika paket som andra IG:ar i arbetsytan komponerar installeras i den
@@ -828,7 +879,7 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 
