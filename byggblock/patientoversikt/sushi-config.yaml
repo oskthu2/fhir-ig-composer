@@ -1,5 +1,5 @@
 id: inera.bb.patientoversikt
-canonical: https://fhir.inera.se/ig/patientoversikt
+canonical: https://fhir.inera.se/ig/bb-patientoversikt
 name: IneraByggblockPatientoversikt
 title: "Byggblock: Patientöversikt"
 description: "Domänbyggblock för Patientöversikt (PS): kliniska profiler, aktörer och förmågor. Komponerar Fasta kontakter. Publiceras inte som tjänst; tjänster som NPÖ och 1177 Journal komponerar det."

@@ -1,0 +1,26 @@
+# Förutsättning för varje federation: medlemskap är tillitsgrunden för anrop.
+anvandningsfall: BliMedlem
+nyckel: FED
+titel: Bli medlem i federationen
+syfte: >-
+  Organisationen blir medlem i federationen. Medlemskapet är tillitsgrunden:
+  konsumenter anropar bara producenter med aktivt medlemskap (F1).
+aktorer:
+  medlem: Federationsmedlem
+  operator: Federationsoperator
+  katalog: Federationsmedlemskatalog
+steg:
+  - titel: Organisationen ansöker om medlemskap
+    fran: medlem
+    till: operator
+    krav: Organisationen SKA ha ett HSA-id som logisk adress och uppfylla federationens regelverk.
+  - titel: Operatören registrerar organisationen
+    fran: operator
+    till: katalog
+    operation: create
+    resurstyp: Organization
+  - titel: Operatören registrerar medlemskapet
+    fran: operator
+    till: katalog
+    operation: create
+    resurstyp: OrganizationAffiliation

@@ -1,8 +1,8 @@
-id: inera.st.katalog
-canonical: https://fhir.inera.se/ig/katalog
-name: IneraStodtjanstKatalog
-title: "Stödtjänst: Tjänstekatalogen"
-description: "Tjänstekatalogens roll i kompositionen: aktörerna Tjänstekatalog och Registrerare, deras förmågor och användningsfallet att registrera en ändpunkt med dess API-instanser. Själva API:et specificeras i IG:n Tjänstekatalogen (https://fhir.inera.se/ig/tjanstekatalog)."
+id: inera.st.t2
+canonical: https://fhir.inera.se/ig/t2
+name: IneraStodtjanstT2
+title: "Stödtjänst: T2-samverkan"
+description: "De federationsgemensamma stödtjänsterna för samverkan enligt RIVTA T2 – tjänstekatalog, federationsmedlemskatalog, engagemangsindex och åtkomstintygstjänst – med deltagarroller, användningsfall och delflöden. Katalogernas API:er specificeras i IG:n Katalogtjänster (https://fhir.inera.se/ig/katalogtjanster); kravbilderna här anger med instantiates vilken specifikation de motsvarar."
 status: draft
 version: 0.1.0
 fhirVersion: 5.0.0

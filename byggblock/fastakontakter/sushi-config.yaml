@@ -1,5 +1,5 @@
 id: inera.bb.fastakontakter
-canonical: https://fhir.inera.se/ig/fastakontakter
+canonical: https://fhir.inera.se/ig/bb-fastakontakter
 name: IneraByggblockFastaKontakter
 title: "Byggblock: Fasta kontakter"
 description: "Internt kravbyggblock för patientens fasta vårdkontakt och fasta läkarkontakt. Publiceras inte som tjänst; kopieras in i de IG:ar som använder det."

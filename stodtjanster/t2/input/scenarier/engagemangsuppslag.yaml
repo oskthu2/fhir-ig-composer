@@ -1,0 +1,19 @@
+# Delflöde som vävs in en gång före hämtningarna (fore, foreEnGang).
+delflode: EngagemangsUppslag
+nyckel: EIU
+titel: Fråga engagemangsindexet
+syfte: >-
+  Konsumenten frågar vilka producenter som har information om patienten och
+  anropar sedan engagerade producenter plus de som inte är indexerade.
+aktorer:
+  konsument: { roll: T2Konsument, binder: fran }
+  index: Engagemangsindex
+steg:
+  - titel: Konsumenten hämtar patientens engagemang
+    fran: konsument
+    till: index
+    operation: search-type
+    resurstyp: EpisodeOfCare
+    krav: >-
+      Konsumenten SKA anropa engagerade producenter och producenter som inte
+      deltar i engagemangsindexet (engagerade ∪ icke-indexerade).

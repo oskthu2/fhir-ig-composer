@@ -3,21 +3,13 @@ anvandningsfall: AnslutaKallsystemSVOD
 nyckel: SVOD-AK
 titel: Ansluta källsystem till SVOD
 syfte: >-
-  Ett källsystem ska gå att hitta och fråga inom SVOD: det registreras i
-  tjänstekatalogen och anmäler vilka patienter som finns hos det.
-
+  Ett källsystem ska gå att hitta inom SVOD: anslutningspunkten registreras i
+  tjänstekatalogen med de informationsmängder den implementerar.
 aktorer:
   kalla: SVODKallsystem
   katalog: Tjanstekatalog
-  index: SVODPatientindex
-
 steg:
   - inkludera: RegistreraAndpunkt
     roller:
       registrerare: kalla
       katalog: katalog
-  - titel: Källsystemet anmäler vilka patienter som finns hos ändpunkten
-    fran: kalla
-    till: index
-    operation: create
-    resurstyp: List

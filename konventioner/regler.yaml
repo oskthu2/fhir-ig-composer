@@ -54,11 +54,21 @@ aktorer:
   # En lokal aktör i en tjänst måste (transitivt) härledas från minst en
   # aktör i ett byggblock och en aktör i tjänstens federation.
   tjanstaktorKraver: [byggblock, federation]
+
   # Generera <Aktör>CS (CapabilityStatement, kind=requirements) som
   # importerar förfädernas förmågor och listar tjänstens profiler.
   genereraFormagor: true
   # Generera <Aktör>Krav (Requirements) med derivedFrom till förfädernas krav.
   genereraKrav: true
+
+informationsmangder:
+  # En specifikation (CapabilityStatement kind=requirements) genereras per
+  # informationsmängd i en tjänst: per exponerad profil som realiserar ett
+  # informationsbehov. Källsystemens förmågor importerar dem, och T1-uppslag
+  # och registrering sker per informationsmängd.
+  generera: true
+  # Namn på genererad specifikation: <Informationsbehov utan "Info">API
+  suffix: API
 
 scenarier:
   # Skissformatet för användningsfall och delflöden, relativt varje IG.
@@ -80,6 +90,10 @@ scenarier:
     formagaSaknas: varning              # avsändare/mottagare saknar interaktionen i sina förmågor
 
 system:
-  # System (system/*.yaml) som antar en roll som härleds från denna roll
-  # förväntas ha en API-instans registrerad i tjänstekatalogen per sådan roll.
+  # Ett system som antar en roll som härleds från registreringsrollen förväntas
+  # ha en anslutningspunkt och en tjänsteinstans i tjänstekatalogen per
+  # informationsmängd det implementerar.
   registreringsroll: TjanstekatalogRegistrerare
+  # Ett system som antar en roll som härleds från medlemsrollen förväntas ha
+  # ett aktivt medlemskap i tjänstens federation.
+  medlemsroll: Federationsmedlem

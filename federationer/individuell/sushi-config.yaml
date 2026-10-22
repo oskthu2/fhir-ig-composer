@@ -39,9 +39,11 @@ extension:
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
     extension:
       - url: paket
-        valueString: inera.st.katalog
+        valueString: inera.st.t2
       - url: version
         valueString: 0.1.0
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/forutsattning
+    valueString: BliMedlem
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/forutsattning
     valueString: AnslutaKallsystemIndividuell
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/flodesmonster
@@ -50,6 +52,12 @@ extension:
         valueCode: search-type
       - url: vid
         valueCode: read
+      - url: fore
+        valueString: EngagemangsUppslag
+      - url: foreEnGang
+        valueBoolean: true
+      - url: foreVarje
+        valueString: T2Uppslag
       - url: efter
         valueString: IndividuellFiltreraNopat
 

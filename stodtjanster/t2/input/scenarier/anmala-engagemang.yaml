@@ -1,0 +1,19 @@
+anvandningsfall: AnmalaEngagemang
+nyckel: EI
+titel: Anmäla engagemang till engagemangsindexet
+syfte: >-
+  En producent som deklarerar engagemangsindexerad pushar ett engagemang per
+  patient den har information om, så att konsumenter bara behöver anropa
+  engagerade producenter.
+aktorer:
+  producent: Engagemangsproducent
+  index: Engagemangsindex
+steg:
+  - titel: Producenten pushar engagemang (patient + producent)
+    fran: producent
+    till: index
+    operation: create
+    resurstyp: EpisodeOfCare
+    krav: >-
+      En producent som deklarerar engagemangsindexerad SKA hålla sina engagemang
+      aktuella i engagemangsindexet, med Provenance.

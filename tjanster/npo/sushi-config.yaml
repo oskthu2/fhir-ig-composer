@@ -26,6 +26,8 @@ extension:
     valueCode: publik
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/anvandningsfall
     valueString: VardpersonalPatientoversikt
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/valfri-informationsmangd
+    valueString: FastKontaktInfo
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
     extension:
       - url: paket

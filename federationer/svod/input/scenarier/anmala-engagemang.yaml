@@ -1,0 +1,13 @@
+# Förutsättning för källsystem med tillvalet engagemangsindexerad.
+anvandningsfall: AnmalaEngagemangSVOD
+nyckel: SVOD-EI
+titel: Anmäla engagemang (engagemangsindexerat källsystem)
+syfte: Ett engagemangsindexerat källsystem håller sina engagemang aktuella i engagemangsindexet.
+aktorer:
+  kalla: SVODEngagemangsindexerad
+  index: Engagemangsindex
+steg:
+  - inkludera: AnmalaEngagemang
+    roller:
+      producent: kalla
+      index: index

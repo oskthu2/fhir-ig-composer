@@ -53,7 +53,8 @@ export function composeScenarios(ctx) {
     valda = anvandningsfall.filter((a) => a.paket === ig.id);
   }
   const monster = ig.roll === 'tjanst' && regler.vavning ? ctx.fed?.flodesmonster : null;
-  for (const n of [monster?.fore, monster?.efter].filter(Boolean)) {
+  const monsterDelfloden = monster ? [...monster.fore, ...monster.foreVarje, ...monster.efter] : [];
+  for (const n of monsterDelfloden) {
     if (!delfloden.has(n)) fel(true, `Flödesmönstret i ${ctx.fed.id} pekar på delflödet ${n}, som inte finns`);
   }
 
@@ -180,13 +181,16 @@ export function composeScenarios(ctx) {
         inkludera(s, ++nr);
         continue;
       }
+      // Invävning: fore (ev. bara en gång), foreVarje före varje matchande
+      // steg (t.ex. T2-uppslaget), efter efter varje matchande steg.
       const vavs = !arDelflode && monster && s.operation && monster.vid.includes(s.operation);
-      if (vavs && monster.fore && !(monster.foreEnGang && foreVavd)) {
-        vav(monster.fore, s, ++nr);
+      if (vavs && !(monster.foreEnGang && foreVavd)) {
+        for (const n of monster.fore) vav(n, s, ++nr);
         foreVavd = true;
       }
+      if (vavs) for (const n of monster.foreVarje) vav(n, s, ++nr);
       steg.push(stegModell(s, ++nr, null));
-      if (vavs && monster.efter) vav(monster.efter, s, ++nr);
+      if (vavs) for (const n of monster.efter) vav(n, s, ++nr);
     }
     return { skiss, banor, info, steg };
   };
@@ -203,11 +207,18 @@ export function composeScenarios(ctx) {
       b.titel ||= a0?.title || b.nyckel;
       b.paket = a0 ? a0.entity.origin.paket : null;
       b.stodtjanst = b.roller.some((r) => ctx.actors.get(r)?.stodtjanst);
+      // Ett tillval spelas av de tjänsteaktörer som spelar dess grundroll; det
+      // är systemet som väljer om det antar tillvalet.
+      b.tillval = b.roller.filter((r) => ctx.actors.get(r)?.tillvalFor);
+      const grund = (r) => ctx.actors.get(r)?.tillvalFor || r;
+      // Roller som ett tillval i banan ärver från följer med tillvalet.
+      const underTillval = new Set(b.tillval.flatMap((t) => ctx.ancestorsOf(t).map((x) => x.name)));
+      const krav = b.roller.filter((r) => !underTillval.has(r));
       b.spelasAv = ctx.serviceActors.filter((s) => {
         const anc = new Set([s.name, ...ctx.ancestorsOf(s.name).map((x) => x.name)]);
-        return b.roller.every((r) => anc.has(r));
+        return krav.every((r) => anc.has(grund(r)));
       }).map((s) => s.name);
-      if (ig.roll === 'tjanst' && b.typ === 'system' && !b.stodtjanst && !b.spelasAv.length) {
+      if (ig.roll === 'tjanst' && b.typ === 'system' && !b.stodtjanst && !b.spelasAv.length && !k.endastInkluderad) {
         fel('rollUtanTjanstaktor', `${skiss.namn}: ingen tjänsteaktör i ${ig.id} spelar ${b.nyckel} (${b.roller.join(' + ')})`);
       }
       // I en tjänst heter scenarioaktören som den tjänsteaktör som spelar den.
@@ -235,7 +246,7 @@ export function composeScenarios(ctx) {
   const kompilerade = [];
   const inkluderade = new Set();
   for (const uc of valda) kompilerade.push(kompilera(uc, false));
-  const anvandaDelfloden = new Set([monster?.fore, monster?.efter].filter((n) => n && delfloden.has(n)));
+  const anvandaDelfloden = new Set(monsterDelfloden.filter((n) => delfloden.has(n)));
   if (ig.roll !== 'tjanst') for (const d of delfloden.values()) if (d.paket === ig.id) anvandaDelfloden.add(d.delflode);
   for (const n of anvandaDelfloden) kompilerade.push(kompilera(delfloden.get(n), true));
   // Inkluderade användningsfall som inte redan är valda kompileras också,
@@ -386,7 +397,7 @@ export function composeScenarios(ctx) {
       fil: k.skiss.fil,
       aktorer: [...k.banor.values()].map((b) => ({
         nyckel: b.nyckel, titel: b.titel, typ: b.typ, roller: b.roller, paket: b.paket, kalla: b.kalla,
-        stodtjanst: b.stodtjanst, spelasAv: b.spelasAv, formagor: b.formagor.map((c) => c.name),
+        stodtjanst: b.stodtjanst, tillval: b.tillval, spelasAv: b.spelasAv, formagor: b.formagor.map((c) => c.name),
       })),
       informationsbehov: [...k.info.values()].map((i) => ({ nyckel: i.nyckel, modell: i.lm, titel: i.titel, profil: i.profil?.name || null, resurstyp: i.typ })),
       steg: k.steg.map(stegUt),
@@ -399,7 +410,7 @@ export function composeScenarios(ctx) {
 function stegUt(s) {
   return {
     nr: s.nr, typ: s.typ, titel: s.titel, fran: s.fran || null, till: s.till || null, operation: s.operation || null,
-    informationsbehov: s.informationsbehov?.nyckel || null, profil: s.informationsbehov?.profil?.name || null,
+    informationsbehov: s.informationsbehov?.nyckel || null, modell: s.informationsbehov?.lm || null, profil: s.informationsbehov?.profil?.name || null,
     resurstyp: s.resurstyp || null, delflode: s.delflode || null, invavd: s.invavd || null, inkluderad: s.inkluderad || null,
     krav: s.kravtext || null, tackning: s.tackning || null,
     alternativ: (s.alternativ || []).map((a) => ({ titel: a.titel, steg: a.steg.map(stegUt) })),

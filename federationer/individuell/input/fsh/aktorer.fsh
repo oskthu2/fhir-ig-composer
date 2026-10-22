@@ -10,6 +10,7 @@ Description: "System som gör vårddokumentation tillgänglig för invånarens d
 * status = #draft
 * type = #system
 * derivedFrom[0] = Canonical(TjanstekatalogRegistrerare)
+* derivedFrom[+] = Canonical(Federationsmedlem)
 * capabilities = Canonical(IndividuellKallsystemCS)
 
 Instance: IndividuellKallsystemMarkande
@@ -43,6 +44,8 @@ Description: "Tjänst som visar vårddokumentation för invånaren."
 * title = "Individuell tillgång: invånartjänst"
 * status = #draft
 * type = #system
+* derivedFrom[0] = Canonical(T2Konsument)
+* derivedFrom[+] = Canonical(Federationsmedlem)
 * capabilities = Canonical(IndividuellKonsumentCS)
 
 Instance: IndividuellKallsystemCS

@@ -38,7 +38,7 @@ const OUT_FSH = path.join('input', 'fsh', '_komponerat');
 const OUT_PAGE = path.join('input', 'pagecontent', 'komposition.md');
 const OUT_MANIFEST = 'komposition.json';
 // Konventionens RuleSets som verktyget läser i stället för att expandera.
-const KEEP = new Set(['Obligation', 'Bas', 'Realiserar', 'Stodtjanst', 'Kompositionsanvisning', 'KopieradFran', 'KopieradFranInstans']);
+const KEEP = new Set(['Obligation', 'Bas', 'Realiserar', 'Stodtjanst', 'TillvalFor', 'ExternSpecifikation', 'Kompositionsanvisning', 'KopieradFran', 'KopieradFranInstans']);
 const SKIP_DIRS = new Set(['node_modules', 'fsh-generated', 'output', 'temp', 'template', 'input-cache', '.git']);
 
 // ---------------------------------------------------------------- arbetsyta
@@ -89,10 +89,12 @@ function loadIg(dir) {
     monster: monster && { ruleset: sub(monster, 'ruleset'), profilprefix: sub(monster, 'profilprefix') },
     flodesmonster: flode && {
       vid: subs(flode, 'vid').map((x) => x.valueCode),
-      fore: sub(flode, 'fore'),
+      fore: subs(flode, 'fore').map((x) => x.valueString),
       foreEnGang: subs(flode, 'foreEnGang')[0]?.valueBoolean === true,
-      efter: sub(flode, 'efter'),
+      foreVarje: subs(flode, 'foreVarje').map((x) => x.valueString),
+      efter: subs(flode, 'efter').map((x) => x.valueString),
     },
+    valfriaInformationsmangder: exts.filter((e) => e.url === EXT + 'valfri-informationsmangd').map((e) => e.valueString),
     anvandningsfall: exts.filter((e) => e.url === EXT + 'anvandningsfall').map((e) => e.valueString),
     forutsattningar: exts.filter((e) => e.url === EXT + 'forutsattning').map((e) => e.valueString),
     dependencies,
@@ -303,6 +305,66 @@ export function compose(ig, ws, rules) {
     }
   }
 
+  // 5a. Informationsmängder: en specifikation per exponerad profil som
+  // realiserar ett informationsbehov. Den motsvarar en extern specifikation om
+  // informationsbehovet anger en (ExternSpecifikation).
+  const realiserarTidigt = (p) => expandRules(p, ruleSets, KEEP)
+    .filter((r) => r.insert?.name === 'Realiserar' && !r.path).map((r) => r.insert.args[0]);
+  const informationsmangder = [];
+  if (ig.roll === 'tjanst' && rules.informationsmangder?.generera) {
+    const today = new Date().toISOString().slice(0, 10);
+    const logiska = new Map(all.filter((e) => e.kind === 'Logical').map((e) => [e.name, e]));
+    const stodCs = new Set(all.filter((e) => e.kind === 'Instance' && e.meta.InstanceOf === 'ActorDefinition')
+      .map(readActor).filter((a) => a.stodtjanst).map((a) => a.capabilities));
+    const serverCs = all.filter((e) => e.kind === 'Instance' && e.meta.InstanceOf === 'CapabilityStatement' && !stodCs.has(e.name))
+      .map(readCapability).flatMap((c) => c.rest.filter((b) => b.mode === 'server'));
+    const spTyp = (n) => ({ patient: 'reference', subject: 'reference', recorder: 'reference', organization: 'reference', target: 'reference', date: 'date', url: 'uri' }[n] || 'token');
+    for (const p of exposed) {
+      let lm = null;
+      for (let q = p, i = 0; q && i < 20 && !lm; q = parentOf(q), i++) lm = realiserarTidigt(q)[0] || null;
+      if (!lm) continue;
+      const modell = logiska.get(lm);
+      const extern = modell && expandRules(modell, ruleSets, KEEP).find((r) => r.insert?.name === 'ExternSpecifikation' && !r.path)?.insert.args[0];
+      const typ = baseType(p);
+      const interaktioner = [...new Set(serverCs.flatMap((b) => b.resurser[typ]?.interaktioner || []))];
+      const sok = [...new Set(serverCs.flatMap((b) => b.resurser[typ]?.sokparametrar || []))];
+      const namn = `${lm.replace(/Info$/, '')}${rules.informationsmangder.suffix || 'API'}`;
+      const titel = (modell?.meta.Title || lm).replace(/^Informationsbehov: /, '');
+      const krav = ig.valfriaInformationsmangder.includes(lm) ? 'valfri' : 'obligatorisk';
+      const text = [
+        `Instance: ${namn}`,
+        'InstanceOf: CapabilityStatement',
+        'Usage: #definition',
+        `Title: "Informationsmängd: ${titel}"`,
+        `Description: "Genererad av ig-composer: specifikation för informationsmängden ${titel} i ${ig.title} (${krav}).${extern ? ` Motsvarar ${extern}.` : ''}"`,
+        `* name = "${namn}"`,
+        `* title = "Informationsmängd: ${titel}"`,
+        '* status = #draft',
+        `* date = "${today}"`,
+        '* kind = #requirements',
+        ...(extern ? [`* instantiates[0] = "${extern}"`] : []),
+        `* fhirVersion = #${ig.fhirVersion}`,
+        '* format[0] = #json',
+        '* rest[0].mode = #server',
+        `* rest[=].resource[0].type = #${typ}`,
+        `* rest[=].resource[=].profile = Canonical(${p.name})`,
+        ...interaktioner.map((c) => `* rest[=].resource[=].interaction[+].code = #${c}`),
+        ...sok.flatMap((n) => [`* rest[=].resource[=].searchParam[+].name = "${n}"`, `* rest[=].resource[=].searchParam[=].type = #${spTyp(n)}`]),
+      ].join('\n');
+      if (names.has(namn)) fel.push(`Informationsmängdens specifikation ${namn} krockar med en artefakt i ${names.get(namn).origin.paket}`);
+      const [e] = parseFsh(text, OUT_FSH);
+      e.origin = { paket: ig.id, lage: 'genererad' };
+      generated.push(e);
+      informationsmangder.push({
+        nyckel: lm, namn, id: e.id, titel, krav, resurstyp: typ, profil: p.name,
+        url: `${ig.canonical}/CapabilityStatement/${e.id}`, version: ig.version, motsvarar: extern || null,
+      });
+    }
+    for (const lm of ig.valfriaInformationsmangder) {
+      if (!informationsmangder.some((i) => i.nyckel === lm)) varningar.push(`Den valfria informationsmängden ${lm} finns inte bland tjänstens profiler`);
+    }
+  }
+
   // 5. Aktörer, förmågor och krav.
   const instancesOf = (type) => [...all, ...generated].filter((e) => e.kind === 'Instance' && e.meta.InstanceOf === type);
   const actors = new Map(instancesOf('ActorDefinition').map((e) => [e.name, readActor(e)]));
@@ -343,6 +405,11 @@ export function compose(ig, ws, rules) {
         // Ett rest-block per läge (en källsystemsroll är t.ex. server för
         // kliniskt innehåll men klient mot tjänstekatalogen).
         const lagen = [...new Set(ancCs.flatMap((c) => capabilities.get(c).rest.map((blk) => blk.mode)).filter(Boolean))];
+        const servertyper = new Set(ancCs.flatMap((c) => capabilities.get(c).rest.filter((blk) => blk.mode === 'server').flatMap((blk) => Object.keys(blk.resurser))));
+        // Obligatoriska informationsmängder importeras; valfria väljer systemet.
+        const mangder = informationsmangder.filter((i) => servertyper.has(i.resurstyp));
+        const mangdImports = mangder.filter((i) => i.krav === 'obligatorisk').map((i) => i.namn);
+        const valfria = mangder.filter((i) => i.krav === 'valfri').map((i) => i.namn);
         const rest = [];
         for (const lage of lagen) {
           rest.push(`* rest[+].mode = #${lage}`, `* rest[=].documentation = "Tjänstens profiler för ${a.title} (${lage}). Interaktioner och sökparametrar följer av de importerade förmågorna."`);
@@ -360,7 +427,7 @@ export function compose(ig, ws, rules) {
           'InstanceOf: CapabilityStatement',
           'Usage: #definition',
           `Title: "Förmågor: ${a.title}"`,
-          `Description: "Genererad av ig-composer. Importerar förmågorna hos aktörens förfäder och anger tjänstens profiler."`,
+          `Description: "Genererad av ig-composer. Importerar förmågorna hos aktörens förfäder och anger tjänstens profiler.${valfria.length ? ` Valfria informationsmängder: ${valfria.join(', ')}.` : ''}"`,
           `* name = "${csName}"`,
           `* title = "Förmågor: ${a.title}"`,
           '* status = #draft',
@@ -369,6 +436,7 @@ export function compose(ig, ws, rules) {
           `* fhirVersion = #${ig.fhirVersion}`,
           '* format[0] = #json',
           ...ancCs.map((c) => `* imports[+] = Canonical(${c})`),
+          ...mangdImports.map((c) => `* imports[+] = Canonical(${c})`),
           ...(rest.length ? rest : ['* rest[+].mode = #server']),
         ].join('\n');
         const [e] = parseFsh(text, OUT_FSH);
@@ -456,7 +524,7 @@ export function compose(ig, ws, rules) {
 
   return {
     ig, plan, copied, local, generated, aliases, utelamnat, refererat, exposed, kravprofiler,
-    anvandningsfall: scenarier.modell, baseType, basesOf, parentOf, fel, varningar,
+    anvandningsfall: scenarier.modell, informationsmangder, requirements, baseType, basesOf, parentOf, fel, varningar,
     actors, capabilities, profileByRef, profiles,
   };
 }
@@ -479,6 +547,7 @@ function readActor(e) {
     title,
     type: rules.map((r) => r.match(/^type\s*=\s*#(\w+)/)?.[1]).find(Boolean) || 'system',
     stodtjanst: rules.some((r) => /^insert Stodtjanst\b/.test(r)),
+    tillvalFor: rules.map((r) => r.match(/^insert TillvalFor\((\w+)\)/)?.[1]).find(Boolean) || null,
     derivedFrom: rules.filter((r) => /^derivedFrom(\[[^\]]*\])?\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, ''))),
     capabilities: rules.filter((r) => /^capabilities\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, '')))[0],
   };
@@ -730,6 +799,9 @@ function manifest(r) {
       krav: k.krav.flatMap((req) => req.statements.map((s) => ({ nyckel: s.key, krav: s.requirement, styrka: s.conformance, kalla: req.name }))),
     })),
     anvandningsfall: r.anvandningsfall,
+    informationsmangder: r.informationsmangder,
+    // Alla krav med sina aktörer (för tillval i systemperspektivet).
+    kravkatalog: r.requirements.map((q) => ({ namn: q.name, aktorer: q.actors, satser: q.statements.map((x) => ({ nyckel: x.key, krav: x.requirement, styrka: x.conformance })) })),
     // Underlag för systemperspektivet (ig-composer system, vy).
     formagor: Object.fromEntries([...r.capabilities.values()].map((c) => [c.name, {
       id: c.id,
@@ -751,7 +823,7 @@ function manifest(r) {
       forfader: forfaderAv(r, p),
     }])),
     aktorer: Object.fromEntries([...r.actors.values()].map((a) => [a.name, {
-      titel: a.title, typ: a.type, stodtjanst: a.stodtjanst, derivedFrom: a.derivedFrom,
+      titel: a.title, typ: a.type, stodtjanst: a.stodtjanst, tillvalFor: a.tillvalFor, derivedFrom: a.derivedFrom,
       formagor: a.capabilities, paket: a.entity.origin.paket,
     }])),
     diagnostik: { fel: r.fel, varningar: r.varningar },

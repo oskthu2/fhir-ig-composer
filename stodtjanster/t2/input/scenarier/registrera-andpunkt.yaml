@@ -1,0 +1,29 @@
+anvandningsfall: RegistreraAndpunkt
+nyckel: TK
+titel: Registrera anslutningspunkt och tjänsteinstanser i tjänstekatalogen
+syfte: >-
+  En producent ska gå att hitta med tjänstesökningen (T1): anslutningspunkten
+  registreras med de specifikationer den implementerar, och en tjänsteinstans
+  per specifikation.
+aktorer:
+  registrerare: TjanstekatalogRegistrerare
+  katalog: Tjanstekatalog
+steg:
+  - titel: Producenten registrerar sin anslutningspunkt
+    fran: registrerare
+    till: katalog
+    operation: create
+    resurstyp: Endpoint
+    krav: >-
+      Anslutningspunkten SKA ange varje informationsmängd den implementerar med
+      extensionen implements (specifikationens kanoniska URL), sin
+      åtkomstintygsutfärdare, och om producenten deltar i engagemangsindexet.
+  - titel: Producenten registrerar en tjänsteinstans per specifikation
+    fran: registrerare
+    till: katalog
+    operation: create
+    resurstyp: CapabilityStatement
+    krav: >-
+      Producenten SKA registrera en tjänsteinstans (CapabilityStatement
+      kind=instance) per implementerad specifikation, med instantiates =
+      specifikationen och implementation.url = anslutningspunktens adress.

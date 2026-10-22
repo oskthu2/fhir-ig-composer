@@ -9,3 +9,5 @@ Alias: $invavd-av = https://fhir.inera.se/ig/conventions/StructureDefinition/inv
 Alias: $restful-interaction = http://hl7.org/fhir/restful-interaction
 Alias: $fhir-types = http://hl7.org/fhir/fhir-types
 Alias: $stodtjanst = https://fhir.inera.se/ig/conventions/StructureDefinition/stodtjanst
+Alias: $tillval-for = https://fhir.inera.se/ig/conventions/StructureDefinition/tillval-for
+Alias: $extern-specifikation = https://fhir.inera.se/ig/conventions/StructureDefinition/extern-specifikation

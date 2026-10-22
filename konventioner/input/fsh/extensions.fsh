@@ -128,15 +128,18 @@ Description: "Anges på en federations-IG: delflöden som vävs in i varje anvä
 * ^context[=].expression = "ImplementationGuide"
 * extension contains
     vid 1..* and
-    fore 0..1 and
+    fore 0..* and
     foreEnGang 0..1 and
-    efter 0..1
+    foreVarje 0..* and
+    efter 0..*
 * extension[vid].value[x] only code
 * extension[vid] ^short = "Operationstyp (restful-interaction), t.ex. search-type, read"
 * extension[fore].value[x] only string
-* extension[fore] ^short = "Delflöde som vävs in före steget"
+* extension[fore] ^short = "Delflöde som vävs in före steget (i angiven ordning)"
 * extension[foreEnGang].value[x] only boolean
-* extension[foreEnGang] ^short = "Väv bara in före-delflödet före första matchande steg"
+* extension[foreEnGang] ^short = "Väv bara in fore-delflödena före första matchande steg"
+* extension[foreVarje].value[x] only string
+* extension[foreVarje] ^short = "Delflöde som vävs in före varje matchande steg, efter fore (t.ex. T2-uppslaget)"
 * extension[efter].value[x] only string
 * extension[efter] ^short = "Delflöde som vävs in efter steget"
 
@@ -187,3 +190,31 @@ Description: "Anges på en ActorDefinition: aktören är en stödtjänst som fed
 * ^context[+].type = #element
 * ^context[=].expression = "ActorDefinition"
 * value[x] only boolean
+
+Extension: TillvalForExt
+Id: tillval-for
+Title: "Tillval för"
+Description: "Anges på en ActorDefinition: aktören är ett tillval för en grundroll. Ett system som spelar grundrollen kan välja att också anta tillvalet (t.ex. engagemangsindexerad producent), och får då tillvalets krav."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ActorDefinition"
+* value[x] only canonical
+* valueCanonical only Canonical(ActorDefinition)
+
+Extension: ValfriInformationsmangdExt
+Id: valfri-informationsmangd
+Title: "Valfri informationsmängd"
+Description: "Anges på en tjänste-IG: informationsmängden (logisk modell) är valfri i tjänsten. En producent får välja bort den; implementerar den mängden gäller kraven fullt ut. Övriga informationsmängder är obligatoriska."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ImplementationGuide"
+* value[x] only string
+
+Extension: ExternSpecifikationExt
+Id: extern-specifikation
+Title: "Extern specifikation"
+Description: "Anges på en logisk modell (informationsbehov): den publicerade specifikation (CapabilityStatement kind=requirements, url|version) som informationsmängden motsvarar. Tjänstens genererade specifikation får den som instantiates, och T1-uppslag och registrering använder den."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "StructureDefinition"
+* value[x] only canonical

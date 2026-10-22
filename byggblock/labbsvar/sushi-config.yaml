@@ -1,5 +1,5 @@
 id: inera.bb.labbsvar
-canonical: https://fhir.inera.se/ig/labbsvar
+canonical: https://fhir.inera.se/ig/bb-labbsvar
 name: IneraByggblockLabbsvar
 title: "Byggblock: Labbsvar"
 description: "Domänbyggblock för laboratoriesvar: kliniska profiler, aktörer och förmågor. Publiceras inte som tjänst; tjänster som 1177 Journal komponerar det."

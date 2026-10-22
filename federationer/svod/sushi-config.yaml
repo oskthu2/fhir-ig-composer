@@ -38,8 +38,12 @@ extension:
         valueCode: read
       - url: fore
         valueString: SVODVerifieraPatientrelation
+      - url: fore
+        valueString: EngagemangsUppslag
       - url: foreEnGang
         valueBoolean: true
+      - url: foreVarje
+        valueString: T2Uppslag
       - url: efter
         valueString: SVODSparrOchLoggning
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
@@ -51,11 +55,15 @@ extension:
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
     extension:
       - url: paket
-        valueString: inera.st.katalog
+        valueString: inera.st.t2
       - url: version
         valueString: 0.1.0
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/forutsattning
+    valueString: BliMedlem
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/forutsattning
     valueString: AnslutaKallsystemSVOD
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/forutsattning
+    valueString: AnmalaEngagemangSVOD
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/forutsattning
     valueString: AnslutaKonsumentSVOD
 

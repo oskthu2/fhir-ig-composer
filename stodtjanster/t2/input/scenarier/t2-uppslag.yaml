@@ -1,0 +1,29 @@
+# Delflöde som vävs in före varje anrop över organisationsgräns (foreVarje).
+delflode: T2Uppslag
+nyckel: T2
+titel: Tjänstesökning, medlemsverifiering och åtkomstintyg
+syfte: >-
+  Samverkansmönstret enligt RIVTA T2: konsumenten slår upp producentens
+  anslutningspunkt (T1), verifierar dess medlemskap (F1) och hämtar ett
+  åtkomstintyg innan anropet.
+aktorer:
+  konsument: { roll: T2Konsument, binder: fran }
+  katalog: Tjanstekatalog
+  medlemskatalog: Federationsmedlemskatalog
+  intyg: Atkomstintygstjanst
+steg:
+  - titel: Tjänstesökning (T1) på specifikation och logisk adress
+    fran: konsument
+    till: katalog
+    operation: search-type
+    resurstyp: Endpoint
+  - titel: Medlemsverifiering (F1) för producenten
+    fran: konsument
+    till: medlemskatalog
+    operation: search-type
+    resurstyp: OrganizationAffiliation
+    krav: Konsumenten SKA INTE anropa en producent utan aktivt medlemskap i federationen.
+  - titel: Åtkomstintyg från den utfärdare anslutningspunkten anvisar
+    fran: konsument
+    till: intyg
+    operation: token

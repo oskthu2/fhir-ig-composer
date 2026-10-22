@@ -76,7 +76,7 @@ Description: "Verksamhetskrav på producent av labbsvar."
 * statement[=].label = "Slutliga svar"
 * statement[=].conformance[0] = #SHALL
 * statement[=].requirement = "Producenten SKA lämna slutliga svar med status `final` och korrigerade svar med status `corrected`."
-* statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/labbsvar/StructureDefinition/labbsvar"
+* statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/bb-labbsvar/StructureDefinition/labbsvar"
 * statement[+].key = "LAB-2"
 * statement[=].label = "Referensintervall"
 * statement[=].conformance[0] = #SHOULD

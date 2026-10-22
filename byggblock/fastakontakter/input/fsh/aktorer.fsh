@@ -70,4 +70,4 @@ Description: "Verksamhetskrav på producent av fasta kontakter."
 * statement[=].label = "Samtliga fasta kontakter"
 * statement[=].conformance[0] = #SHALL
 * statement[=].requirement = "Producenten SKA tillhandahålla samtliga gällande fasta kontakter för patienten (patientlagen 6 kap. 2–3 §§)."
-* statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/fastakontakter/StructureDefinition/fast-kontakt"
+* statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/bb-fastakontakter/StructureDefinition/fast-kontakt"

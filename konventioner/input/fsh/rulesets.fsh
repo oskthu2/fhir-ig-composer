@@ -49,3 +49,11 @@ RuleSet: Realiserar(informationsbehov)
 // Aktören är en stödtjänst som federationen tillhandahåller.
 RuleSet: Stodtjanst
 * extension[$stodtjanst].valueBoolean = true
+
+// Aktören är ett tillval för en grundroll.
+RuleSet: TillvalFor(grundroll)
+* extension[$tillval-for].valueCanonical = Canonical({grundroll})
+
+// Informationsmängden motsvarar en publicerad specifikation (url|version).
+RuleSet: ExternSpecifikation(url)
+* ^extension[$extern-specifikation].valueCanonical = "{url}"
