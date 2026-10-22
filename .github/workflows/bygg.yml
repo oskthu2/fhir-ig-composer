@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      infopeak:
+        description: Kör också läsadaptern mot referensrealiseringen på infopeak
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +44,13 @@ jobs:
         run: |
           node verktyg/ig-composer.mjs federation testa
           cat rapport/federation.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Läsläge mot en extern miljö: bara på begäran, så att bygget inte beror på den.
+      - name: Federationstest mot infopeak (läsläge)
+        if: ${{ inputs.infopeak }}
+        run: |
+          node verktyg/ig-composer.mjs federation testa --mot infopeak
+          cat rapport/federation-infopeak.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Matris federation × domän
         run: |

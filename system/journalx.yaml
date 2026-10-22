@@ -2,7 +2,9 @@
 # summerar kraven över rollerna och jämför med nuläget.
 system: JournalX
 titel: Journalsystem X
-organisation: Region Exempel
+organisation:
+  namn: Region Exempel
+  hsaId: SE2321000099-EXMP
 andpunkter:
   - https://fhir.journalx.region-exempel.se/r5
 roller:
@@ -15,5 +17,11 @@ roller:
 nulage:
   # CapabilityStatement (kind=instance), som från GET [bas]/metadata
   formaga: nulage/journalx-metadata.json
-  # Export från tjänstekatalogen: API-instanser (TKAPIInstance)
-  anslutningar: nulage/tjanstekatalog-export.json
+  # T2-katalogerna: organisationer, medlemskap, anslutningspunkter,
+  # tjänsteinstanser och engagemang
+  katalog: nulage/t2-katalog.json
+# Tillval systemet antar, och valda informationsmängder per tjänst. Utan val
+# gäller de obligatoriska och de valfria som nuläget redan har.
+tillval: []
+informationsmangder:
+  inera.tjanst.npo: [VardkontaktInfo]

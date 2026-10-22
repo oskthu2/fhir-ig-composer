@@ -1,0 +1,42 @@
+# Läsadapter mot referensrealiseringen av RIVTA T2 på infopeak. Används av
+#   node verktyg/ig-composer.mjs federation testa --mot infopeak
+#
+# Adaptern skriver aldrig: förutsättningarna (medlemskap, anslutningspunkter,
+# engagemang) verifieras mot katalogerna i stället för att registreras.
+# Inga inloggningsuppgifter lagras här. Katalogerna och producenterna nås med
+# en token från tokenadressen; IG-sajterna (för att hämta de externa
+# specifikationerna) kräver basic auth, som läses från miljövariablerna
+# INFOPEAK_ANVANDARE och INFOPEAK_LOSENORD.
+namn: infopeak
+titel: Referensrealiseringen av RIVTA T2 (infopeak)
+bas: https://demo.inera.infopeak.se
+# POST utan innehåll → { access_token }. Samma token används som åtkomstintyg.
+token: /auth/token
+stod:
+  Tjanstekatalog: /tjk
+  Federationsmedlemskatalog: /fed
+  Engagemangsindex: /ei
+  Atkomstintygstjanst: /auth/token
+# Anslutningspunkternas adresser i katalogen pekar på API-gatewayn internt.
+adresser:
+  - fran: https://localhost:8243/
+    till: https://demo.inera.infopeak.se/prod/
+# Federationens organisation i federationsmedlemskatalogen per federation.
+federationer:
+  inera.fed.pot2: fed-po
+# Tjänster att testa. System härleds ur katalogen: varje medlemsorganisation
+# med en anslutningspunkt som implementerar någon av tjänstens
+# informationsmängder (via ExternSpecifikation) blir ett system.
+tjanster:
+  - inera.tjanst.pot2
+testpatient:
+  system: http://electronichealth.se/identifier/personnummer
+  varde: '191212121212'
+# Externa specifikationer (CC0) som tjänstens informationsmängder motsvarar.
+# Ögonblicksbilder ligger i externa/infopeak; hämta nya med
+#   node verktyg/ig-composer.mjs externa hamta
+externa:
+  katalog: externa/infopeak
+  paket:
+    - https://patientoversikt.inera.infopeak.se/package.tgz
+    - https://katalog.inera.infopeak.se/package.tgz

@@ -285,8 +285,15 @@ const el = (tag, attrs = {}, ...barn) => {
   return e;
 };
 const ROLL = { byggblock: 'Byggblock', federation: 'Federation', stodtjanst: 'Stödtjänst', tjanst: 'Tjänst', konvention: 'Konvention' };
-const SYSTEM = DATA?.system || [];
+// System i systemregistret (testade mot den mockade federationen) och system
+// härledda ur en verklig T2-realisering (läsadaptern), med sin körning.
 const FEDERATION = DATA?.federation || null;
+const MILJÖER = DATA?.miljoer || [];
+const SYSTEM = [
+  ...(DATA?.system || []).map((a) => ({ ...a, körning: FEDERATION })),
+  ...MILJÖER.flatMap((k) => (k.analyser || []).map((a) => ({ ...a, system: `${k.miljo.namn}:${a.system}`, miljö: k.miljo, körning: k, källsystem: a.system }))),
+];
+const orgText = (o) => (typeof o === 'string' ? o : [o?.namn, o?.hsaId && `(${o.hsaId})`].filter(Boolean).join(' '));
 const LÄGE = {
   lokal: 'lokal', kopierad: 'kopierad', genererad: 'genererad', ruleset: 'RuleSet', alias: 'alias',
   refererad: 'refererad', utelämnat: 'utelämnat',
@@ -679,12 +686,17 @@ function apiStatus(item, aktiva) {
 function ritaSystemlista() {
   const s = document.getElementById('system');
   s.hidden = !SYSTEM.length;
-  s.replaceChildren(el('h3', {}, 'System'), el('div', {}, SYSTEM.map((a) => el('button', {
+  const chip = (a) => el('button', {
     class: 'chip igchip r-konvention', 'aria-pressed': state.vy === 'system' && state.id === a.system ? 'true' : 'false',
     onclick: () => välj('system', a.system), title: a.roller.map((r) => r.id).join(', '),
   }, a.titel, el('span', { class: 'svag liten' }, `${a.roller.length} roller`),
-  a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap ? el('span', { class: 'status saknas' }, `${a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap} gap`) : null))),
-  el('p', { class: 'svag liten', style: 'margin:8px 0 0' }, 'Ett system antar roller i en eller flera tjänster. Välj ett system för summan av kraven på dess API, gapet mot nuläget och vad som ska testas.'));
+  a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap ? el('span', { class: 'status saknas' }, `${a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap} gap`) : null);
+  s.replaceChildren(
+    el('h3', {}, 'System i systemregistret'), el('div', {}, SYSTEM.filter((a) => !a.miljö).map(chip)),
+    ...MILJÖER.map((k) => el('div', {}, el('h3', { style: 'margin-top:12px' }, `System i ${k.miljo.titel}`),
+      el('div', {}, SYSTEM.filter((a) => a.miljö?.namn === k.miljo.namn).map(chip)),
+      el('p', { class: 'svag liten', style: 'margin:6px 0 0' }, `Härledda ur katalogerna, läsläge, ${new Date(k.genererad).toLocaleString('sv-SE')}.`))),
+    el('p', { class: 'svag liten', style: 'margin:8px 0 0' }, 'Ett system antar roller i en eller flera tjänster. Välj ett system för summan av kraven på dess API, gapet mot nuläget och vad som ska testas.'));
 }
 
 function ritaSystem(p, namn) {
@@ -693,14 +705,15 @@ function ritaSystem(p, namn) {
   const valda = state.filter.roller ||= new Set(a.roller.map((r) => r.id));
   const vald = (lista) => lista.some((r) => valda.has(r));
   p.append(
-    el('div', { class: 'panelhuvud' }, el('h2', {}, a.titel), el('span', { class: 'svag' }, a.organisation || '')),
-    el('div', { class: 'etiketter' }, el('span', { class: 'etikett mono' }, a.fil), ...a.andpunkter.map((u) => el('span', { class: 'etikett mono' }, u)),
-      el('span', { class: 'etikett' }, a.nulage.finns ? `nuläge: ${a.nulage.fil}` : 'inget nuläge inlämnat')),
+    el('div', { class: 'panelhuvud' }, el('h2', {}, a.titel), el('span', { class: 'svag' }, orgText(a.organisation))),
+    el('div', { class: 'etiketter' }, a.miljö ? el('span', { class: 'etikett' }, `härlett ur ${a.miljö.titel}`) : el('span', { class: 'etikett mono' }, a.fil),
+      ...a.andpunkter.map((u) => el('span', { class: 'etikett mono' }, u)),
+      el('span', { class: 'etikett' }, a.nulage.finns ? `nuläge: ${a.nulage.fil || 'GET /metadata'}` : 'inget nuläge inlämnat')),
     el('h3', {}, 'Roller – summera för'),
     el('div', { class: 'filter', role: 'group', 'aria-label': 'Roller att summera' }, a.roller.map((r) => el('button', {
       class: 'växel', 'aria-pressed': valda.has(r.id) ? 'true' : 'false', title: r.id,
       onclick: () => { valda.has(r.id) ? valda.delete(r.id) : valda.add(r.id); ritaMatris(); ritaPanel(); },
-    }, prick(r.tjanst), r.titel))),
+    }, prick(r.tjanst), r.titel, r.tillval ? el('span', { class: 'svag liten' }, 'tillval') : null))),
   );
   if (a.fel.length) p.append(el('ul', {}, a.fel.map((f) => el('li', { class: 'nej' }, f))));
 
@@ -712,7 +725,7 @@ function ritaSystem(p, namn) {
     el('div', { class: 'siffra' }, el('b', {}, räkna((x) => x.st === 'ok')), el('span', {}, 'API-krav uppfyllda')),
     el('div', { class: 'siffra' }, el('b', {}, räkna((x) => x.st === 'delvis' || x.st === 'saknas')), el('span', {}, 'API-krav med gap')),
     a.nulage.finns ? null : el('div', { class: 'siffra' }, el('b', {}, räkna((x) => x.st === 'okänt')), el('span', {}, 'API-krav, okänt nuläge')),
-    el('div', { class: 'siffra' }, el('b', {}, `${ansl.filter((f) => f.status === 'registrerad').length}/${ansl.length}`), el('span', {}, 'registrerade API-instanser')),
+    el('div', { class: 'siffra' }, el('b', {}, `${ansl.filter((f) => f.status === 'registrerad').length}/${ansl.length}`), el('span', {}, 'registreringar i T2-katalogerna')),
     el('div', { class: 'siffra' }, el('b', {}, tester.length), el('span', {}, 'tester')),
   ));
 
@@ -723,8 +736,19 @@ function ritaSystem(p, namn) {
     { id: 'scn', titel: 'Användningsfall', antal: a.scenarier.filter((x) => valda.has(x.roll)).length, rita: (c) => ritaSystemScenarier(c, a, valda) },
     { id: 'ans', titel: 'Anslutningar', antal: ansl.length, rita: (c) => ritaSystemAnslutningar(c, a, valda) },
     { id: 'test', titel: 'Testlista', antal: tester.length, rita: (c) => ritaTestlista(c, a, tester) },
-    FEDERATION && { id: 'fed', titel: 'Federationstest', antal: FEDERATION.korningar.filter((k) => k.system === a.system && valda.has(k.roll)).length, rita: (c) => ritaFederationstest(c, a, valda) },
+    a.körning && { id: 'fed', titel: 'Federationstest', antal: a.körning.korningar.filter((k) => k.system === (a.källsystem || a.system) && valda.has(k.roll)).length, rita: (c) => ritaFederationstest(c, a, valda) },
+    a.körning?.specifikationer && { id: 'spec', titel: 'Specifikationer', antal: specifikationerFor(a).length, rita: (c) => ritaSpecifikationer(c, a) },
   ].filter(Boolean));
+}
+
+const specifikationerFor = (a) => (a.körning?.specifikationer || []).filter((j) => a.roller.some((r) => r.tjanst === j.tjanst));
+function ritaSpecifikationer(c, a) {
+  c.append(el('p', { class: 'svag' }, 'Tjänstens specifikation per informationsmängd jämförd med den externa specifikation informationsmängden motsvarar (ExternSpecifikation). Varningar är skillnader en producent som följer den externa kan behöva hantera.'));
+  for (const j of specifikationerFor(a)) {
+    c.append(el('h3', {}, j.titel), el('p', { class: 'mono liten' }, j.egen, el('br'), '↔ ', j.extern),
+      j.avvikelser.length ? el('ul', {}, j.avvikelser.map((x) => el('li', {}, el('span', { class: `status ${x.niva === 'info' ? 'manuell' : x.niva === 'varning' ? 'delvis' : 'saknas'}` }, x.niva), ' ', x.text)))
+        : el('p', { class: 'ja' }, 'Inga avvikelser.'));
+  }
 }
 
 function delar(lista, valda, namnAv) {
@@ -822,23 +846,34 @@ function ritaSystemScenarier(c, a, valda) {
 
 function ritaSystemAnslutningar(c, a, valda) {
   const f = a.anslutningar.forvantade.filter((x) => valda.has(x.roll));
-  c.append(
-    el('p', { class: 'svag' }, 'En roll som härleds från tjänstekatalogens registrerare förväntas ha en API-instans i tjänstekatalogen som följer tjänstens API-specifikation (url|version).'),
+  const TYP = { medlemskap: 'Medlemskap', anslutningspunkt: 'Anslutningspunkt', engagemangsindexerad: 'Engagemangsindexerad' };
+  const mängder = a.roller.filter((r) => valda.has(r.id) && r.informationsmangder?.length);
+  c.append(...[
+    el('p', { class: 'svag' }, 'Registreringarna i T2-katalogerna som rollerna förutsätter: medlemskap i federationen (federationsmedlemskatalogen), en anslutningspunkt per vald informationsmängd med tjänsteinstans (tjänstekatalogen) och, med tillvalet, engagemangsindexering.'),
+    mängder.length ? el('div', {}, el('h3', {}, 'Informationsmängder'), el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Roll', 'Informationsmängd', 'Krav', 'Vald', 'Registreras mot'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, mängder.flatMap((r) => r.informationsmangder.map((i) => el('tr', {},
+        el('td', {}, r.titel), el('td', {}, i.titel), el('td', {}, i.krav),
+        el('td', {}, i.vald ? el('span', { class: 'ja' }, 'ja') : el('span', { class: 'svag' }, 'nej')),
+        el('td', { class: 'mono liten' }, i.spec),
+      ))))))) : null,
+    el('h3', {}, 'Registreringar'),
     f.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
-      el('thead', {}, el('tr', {}, ['Roll', 'Förväntad specifikation', 'Status', 'Registrerad'].map((h) => el('th', {}, h)))),
+      el('thead', {}, el('tr', {}, ['Roll', 'Typ', 'Förväntat', 'Status', 'Registrerat'].map((h) => el('th', {}, h)))),
       el('tbody', {}, f.map((x) => el('tr', {},
         el('td', {}, rollEtikett(a, x.roll)),
+        el('td', {}, TYP[x.typ] || x.typ, x.informationsmangd ? el('div', { class: 'via' }, x.informationsmangd) : null),
         el('td', { class: 'mono liten' }, x.specifikation),
-        el('td', {}, statusEl(x.status)),
+        el('td', {}, statusEl(x.status), x.text ? el('div', { class: 'via' }, x.text) : null),
         el('td', { class: 'mono liten' }, x.registrerad || '–', x.apiInstans ? el('div', { class: 'via' }, x.apiInstans) : null),
       ))),
     )) : el('p', { class: 'tom' }, 'Inga valda roller kräver registrering.'),
-    a.anslutningar.ovantade.length ? el('div', {}, el('h3', {}, 'Registrerade utan roll i systemet'),
+    a.anslutningar.ovantade.length ? el('div', {}, el('h3', {}, 'Registrerat utan vald informationsmängd'),
       el('ul', {}, a.anslutningar.ovantade.map((o) => el('li', { class: 'mono liten' }, `${o.instantiates} (${o.apiInstans})`)))) : null,
     el('h3', {}, 'Nuläge'),
     a.nulage.finns ? el('p', {}, `${a.nulage.software?.name || ''} ${a.nulage.software?.version || ''}`, a.nulage.instantiates.length ? el('div', { class: 'mono liten svag' }, `instantiates: ${a.nulage.instantiates.join(', ')}`) : null)
       : el('p', { class: 'svag' }, 'Inget CapabilityStatement (kind=instance) inlämnat för systemet.'),
-  );
+  ].filter(Boolean));
 }
 
 function ritaTestlista(c, a, tester) {
@@ -866,23 +901,27 @@ function ritaTestlista(c, a, tester) {
 
 // ------------------------------------------------------------------ federationstest
 function ritaFederationstest(c, a, valda) {
-  const f = FEDERATION;
-  const fore = f.fore.find((x) => x.system === a.system);
-  const efter = f.efter.find((x) => x.system === a.system);
+  const f = a.körning;
+  const namn = a.källsystem || a.system;
+  const fore = f.fore.find((x) => x.system === namn);
+  const efter = f.efter.find((x) => x.system === namn);
+  const nyckel = (x) => `${x.roll}|${x.typ}|${x.informationsmangd || ''}`;
   c.append(
-    el('p', { class: 'svag' }, 'Användningsfallen körda som HTTP-anrop mot en mockad federation (ig-composer federation testa, ',
-      new Date(f.genererad).toLocaleString('sv-SE'), '). Systemets mock kan exakt det dess nuläge säger. Andra källsystem hittas via den mockade tjänstekatalogen; förutsättningarna (anslutning) körs först.'),
+    el('p', { class: 'svag' }, f.miljo?.skriv === false
+      ? `Användningsfallen körda i läsläge mot ${f.miljo.titel} (${f.miljo.bas}), ${new Date(f.genererad).toLocaleString('sv-SE')}. Testköraren är konsument enligt T2: tjänstesökning, medlemsverifiering, åtkomstintyg och engagemangsindex. Förutsättningarna verifieras mot katalogerna, inget skrivs.`
+      : `Användningsfallen körda som HTTP-anrop mot en mockad federation (ig-composer federation testa, ${new Date(f.genererad).toLocaleString('sv-SE')}). Systemets mock kan exakt det dess nuläge säger och kräver åtkomstintyg. Förutsättningarna (medlemskap, anslutning, engagemang) körs först och skriver till de mockade katalogerna; andra källsystem hittas med tjänstesökningen.`),
   );
   if (fore?.anslutningar.length) {
-    c.append(el('h3', {}, 'Anslutningar i tjänstekatalogen'), el('div', { class: 'tabellram' }, el('table', { class: 'data' },
-      el('thead', {}, el('tr', {}, ['Roll', 'Före förutsättningarna', 'Efter'].map((h) => el('th', {}, h)))),
+    c.append(el('h3', {}, 'Registreringar i T2-katalogerna'), el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Roll', 'Registrering', 'Före förutsättningarna', 'Efter'].map((h) => el('th', {}, h)))),
       el('tbody', {}, fore.anslutningar.filter((x) => valda.has(x.roll)).map((x) => el('tr', {},
         el('td', {}, rollEtikett(a, x.roll)),
+        el('td', {}, x.typ, x.informationsmangd ? el('div', { class: 'via' }, x.informationsmangd) : null),
         el('td', {}, statusEl(x.status)),
-        el('td', {}, statusEl(efter.anslutningar.find((y) => y.roll === x.roll)?.status || '–')),
+        el('td', {}, statusEl(efter.anslutningar.find((y) => nyckel(y) === nyckel(x))?.status || '–')),
       ))))));
   }
-  for (const k of f.korningar.filter((x) => x.system === a.system && valda.has(x.roll))) {
+  for (const k of f.korningar.filter((x) => x.system === namn && valda.has(x.roll))) {
     c.append(
       el('h3', {}, `${k.forutsattning ? 'Förutsättning: ' : ''}${k.titel} `, statusEl(k.status)),
       el('p', { class: 'svag liten' }, rollEtikett(a, k.roll)),

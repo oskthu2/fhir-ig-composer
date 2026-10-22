@@ -3,8 +3,12 @@
 // resurser. En ändpunkt gör bara det dess CapabilityStatement säger:
 // interaktioner och sökparametrar som inte finns ger 405 respektive 400, så
 // att mocken av ett system speglar systemets nuläge.
+//
+// T2: en ändpunkt kan vara utfärdare av åtkomstintyg (POST [bas]/token) eller
+// skyddad (kräver ett utfärdat intyg som Bearer-token, annars 401).
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 
 const outcome = (code, text) => ({
   resourceType: 'OperationOutcome',
@@ -14,16 +18,52 @@ const outcome = (code, text) => ({
 // Parametrar som inte är sökparametrar och därför alltid tillåts.
 const RESULTAT_PARAMETRAR = new Set(['_count', '_format', '_summary', '_sort', '_elements', '_total']);
 
+// Sökvärdet för en token: [system|]värde.
+const token = (v) => {
+  const i = v.indexOf('|');
+  return i < 0 ? { system: null, varde: v } : { system: v.slice(0, i) || null, varde: v.slice(i + 1) };
+};
+const idMatch = (idf, v) => !!idf && idf.value === v.varde && (!v.system || idf.system === v.system);
+// Referenser jämförs på typ/id, oavsett bas-URL.
+const typId = (r) => String(r).split('/').slice(-2).join('/');
+const refMatch = (r, v) => !!r?.reference && typId(r.reference) === typId(v);
+const EXT = 'https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/';
+const utanVersion = (u) => String(u).split('|')[0];
+
+// Filter för de sökparametrar mocken förstår; övriga godtas men filtrerar inte.
+// Ett filter som ger null kan inte avgöras för resursen, som då släpps igenom.
+const FILTER = {
+  category: (r, v) => JSON.stringify(r.category || []).includes(v.split('|').pop()),
+  status: (r, v) => (r.status === undefined ? null : String(r.status) === v),
+  active: (r, v) => String(r.active !== false) === v,
+  implements: (r, v) => (r.extension || []).some((e) => e.url === `${EXT}implements` && utanVersion(e.valueCanonical) === utanVersion(v)),
+  organization: (r, v) => refMatch(r.managingOrganization, v),
+  identifier: (r, v) => (r.identifier || []).some((i) => idMatch(i, token(v))),
+  'participating-organization': (r, v) => refMatch(r.participatingOrganization, v),
+  'primary-organization': (r, v) => refMatch(r.organization, v),
+  role: (r, v) => JSON.stringify(r.code || []).includes(`"${token(v).varde}"`),
+  'patient-identifier': (r, v) => idMatch(r.patient?.identifier, token(v)),
+  'organization-identifier': (r, v) => idMatch(r.managingOrganization?.identifier, token(v)),
+  // Kedjad sökning på patientens identitet: avgörs bara när resursen bär den.
+  'patient.identifier': (r, v) => {
+    const idf = (r.subject || r.patient)?.identifier;
+    return idf ? idMatch(idf, token(v)) : null;
+  },
+  url: (r, v) => r.url === v,
+};
+
 export class MockFederation {
   constructor() {
     this.andpunkter = new Map(); // bas-sökväg → { cs, resurser: Map(typ → Map(id → resurs)), logg: [] }
     this.server = null;
     this.bas = null;
+    this.intyg = new Set();
   }
 
   // cs: CapabilityStatement (kind=instance) eller null om nuläge saknas.
-  laggTill(sokvag, cs, resurser = []) {
-    const a = { sokvag, cs, resurser: new Map(), logg: [], nasta: 1 };
+  // val: { utfardare: true } utfärdar åtkomstintyg, { skyddad: true } kräver ett.
+  laggTill(sokvag, cs, resurser = [], val = {}) {
+    const a = { sokvag, cs, resurser: new Map(), logg: [], nasta: 1, ...val };
     for (const r of resurser) this.spara(a, structuredClone(r));
     this.andpunkter.set(sokvag, a);
     return a;
@@ -86,6 +126,14 @@ export class MockFederation {
       }
       const logga = (interaktion, status) => a.logg.push({ tid: new Date().toISOString(), metod: req.method, sokvag: u.pathname + u.search, interaktion, status });
 
+      // Åtkomstintyg: utfärdaren lämnar ut ett intyg, skyddade ändpunkter kräver det.
+      if (a.utfardare && req.method === 'POST' && delar[0] === 'token') {
+        const t = crypto.randomUUID();
+        this.intyg.add(t);
+        logga('token', 200);
+        return svara(200, { access_token: t, token_type: 'Bearer', expires_in: 300 }, { 'content-type': 'application/json' });
+      }
+
       // Nuläge saknas: ändpunkten kan inte avgöra något.
       if (!a.cs) {
         logga('okänd', 501);
@@ -95,6 +143,14 @@ export class MockFederation {
         logga('capabilities', 200);
         return svara(200, a.cs);
       }
+      // Skyddade ändpunkter: allt utom metadata kräver ett giltigt åtkomstintyg.
+      if (a.skyddad) {
+        const t = (req.headers.authorization || '').replace(/^Bearer /, '');
+        if (!this.intyg.has(t)) {
+          logga('åtkomstintyg saknas', 401);
+          return svara(401, outcome('security', 'Giltigt åtkomstintyg (Bearer) krävs'));
+        }
+      }
       const kontroll = (typ, interaktion, params) => {
         const f = this.formaga(a, typ);
         if (!f || !f.interaktioner.has(interaktion)) {
@@ -102,7 +158,8 @@ export class MockFederation {
           svara(405, outcome('not-supported', `${interaktion}${typ ? ` på ${typ}` : ''} stöds inte enligt ändpunktens CapabilityStatement`));
           return false;
         }
-        const okanda = params ? [...params.keys()].filter((p) => !RESULTAT_PARAMETRAR.has(p) && f.sokparametrar && !f.sokparametrar.has(p)) : [];
+        // Kedjad sökning (patient.identifier) godtas om basparametern stöds.
+        const okanda = params ? [...params.keys()].filter((p) => !RESULTAT_PARAMETRAR.has(p) && f.sokparametrar && !f.sokparametrar.has(p.split('.')[0])) : [];
         if (okanda.length) {
           logga(interaktion, 400);
           svara(400, outcome('not-supported', `Sökparametrarna ${okanda.join(', ')} stöds inte för ${typ}`));
@@ -125,9 +182,9 @@ export class MockFederation {
       if (req.method === 'GET' && !id) {
         if (!kontroll(typ, 'search-type', u.searchParams)) return;
         let lista = [...(a.resurser.get(typ)?.values() || [])];
-        // Mocken filtrerar bara på kategori; övriga värden ignoreras.
-        const kategori = u.searchParams.get('category');
-        if (kategori) lista = lista.filter((r) => JSON.stringify(r.category || []).includes(kategori.split('|').pop()));
+        for (const [p, v] of u.searchParams) {
+          if (FILTER[p]) lista = lista.filter((r) => FILTER[p](r, v) !== false);
+        }
         logga('search-type', 200);
         return svara(200, bundle(lista));
       }
@@ -158,10 +215,10 @@ export class MockFederation {
   }
 }
 
-export async function fhir(url, { metod = 'GET', kropp } = {}) {
+export async function fhir(url, { metod = 'GET', kropp, headers = {} } = {}) {
   const svar = await fetch(url, {
     method: metod,
-    headers: { accept: 'application/fhir+json', ...(kropp ? { 'content-type': 'application/fhir+json' } : {}) },
+    headers: { accept: 'application/fhir+json', ...(kropp ? { 'content-type': 'application/fhir+json' } : {}), ...headers },
     body: kropp ? JSON.stringify(kropp) : undefined,
   });
   const text = await svar.text();

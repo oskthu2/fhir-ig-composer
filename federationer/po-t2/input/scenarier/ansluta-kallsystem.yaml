@@ -1,0 +1,15 @@
+# Förutsättning (extension forutsattning): ingår i varje tjänst i federationen.
+anvandningsfall: AnslutaKallsystemPOT2
+nyckel: POT2-AK
+titel: Ansluta källsystem till Patientöversiktsfederationen
+syfte: >-
+  Ett källsystem ska gå att hitta med tjänstesökningen: anslutningspunkten
+  registreras med de informationsmängder den implementerar.
+aktorer:
+  kalla: POT2Kallsystem
+  katalog: Tjanstekatalog
+steg:
+  - inkludera: RegistreraAndpunkt
+    roller:
+      registrerare: kalla
+      katalog: katalog

@@ -6,9 +6,10 @@ import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
 import { loadWorkspace, compose, matrix, postProcess, viewData, renderView, analyseSystems } from './ig-composer.mjs';
-import { apiStatus, loadSystems } from './system.mjs';
+import { apiStatus, loadSystems, analyseSystem } from './system.mjs';
 import { MockFederation, fhir } from './mock.mjs';
-import { testaFederation } from './federation.mjs';
+import { testaFederation, byggFederation } from './federation.mjs';
+import { systemFranKatalog, jamforSpecifikationer, lasMiljo } from './infopeak.mjs';
 import { loadManifests } from './ig-composer.mjs';
 import { parseFsh, expandRules } from './fsh.mjs';
 
@@ -89,7 +90,8 @@ test('lokal tjänsteprofil utan federationens bas ger fel', () => {
 
 test('matrisen placerar tjänsterna i rätt celler', () => {
   const { json } = matrix(ws);
-  assert.deepEqual(json.domaner, ['inera.bb.patientoversikt', 'inera.bb.labbsvar']);
+  assert.deepEqual(json.domaner, ['inera.bb.patientoversikt', 'inera.bb.labbsvar', 'inera.bb.pot2']);
+  assert.deepEqual(json.rader.find((r) => r.federation === 'inera.fed.pot2').celler.find((c) => c.domän === 'inera.bb.pot2').tjanster, ['inera.tjanst.pot2']);
   const cell = (fed, dom) => json.rader.find((r) => r.federation === fed).celler.find((c) => c.domän === dom).tjanster;
   assert.deepEqual(cell('inera.fed.svod', 'inera.bb.patientoversikt'), ['inera.tjanst.npo']);
   assert.deepEqual(cell('inera.fed.svod', 'inera.bb.labbsvar'), []);
@@ -274,11 +276,37 @@ test('system: summan av API-krav över roller, med gap mot nuläget', () => {
   // Den mest specifika profilen per tjänst: VardkontaktNPO ersätter NPÖ:s Vardkontakt.
   assert.deepEqual(enc.profiler.map((p) => [p.namn, p.tjanst]).sort(),
     [['Vardkontakt', 'inera.tjanst.journal1177'], ['VardkontaktNPO', 'inera.tjanst.npo']]);
-  // Samma profil (samma källa) med två kanoniska URL:er.
-  const ct = api('server', 'CareTeam').profiler;
-  assert.equal(ct.length, 2);
-  assert.equal(new Set(ct.map((p) => p.kalla)).size, 1);
-  assert.deepEqual(api('server', 'CareTeam').roller.sort(), ['inera.tjanst.journal1177#Journal1177KallsystemMarkande', 'inera.tjanst.npo#NPOKallsystem']);
+  // NPÖ:s Fast kontakt är valfri och inte vald av JournalX: bara 1177 Journal kräver CareTeam.
+  assert.deepEqual(api('server', 'CareTeam').roller, ['inera.tjanst.journal1177#Journal1177KallsystemMarkande']);
+  const npo = x.roller.find((r) => r.aktor === 'NPOKallsystem').informationsmangder;
+  assert.deepEqual(npo.map((i) => [i.nyckel, i.krav, i.vald]), [['FastKontaktInfo', 'valfri', false], ['VardkontaktInfo', 'obligatorisk', true]]);
+});
+
+test('system: en vald valfri informationsmängd ger samma profil med två kanoniska URL:er', () => {
+  const sys = loadSystems(root).find((x) => x.system === 'JournalX');
+  const x = analyseSystem({ ...sys, informationsmangder: { 'inera.tjanst.npo': ['VardkontaktInfo', 'FastKontaktInfo'] } },
+    loadManifests(loadWorkspace(root)), root, rules.system);
+  const ct = x.api.find((a) => a.lage === 'server' && a.typ === 'CareTeam');
+  assert.equal(ct.profiler.length, 2);
+  assert.equal(new Set(ct.profiler.map((p) => p.kalla)).size, 1);
+  assert.deepEqual(ct.roller.sort(), ['inera.tjanst.journal1177#Journal1177KallsystemMarkande', 'inera.tjanst.npo#NPOKallsystem']);
+  assert.ok(x.anslutningar.forvantade.some((f) => f.informationsmangd === 'FastKontaktInfo' && f.roll.endsWith('#NPOKallsystem') && f.status === 'saknas'));
+});
+
+test('system: tillval blir en egen roll med sina krav och förutsättningar', () => {
+  const p = systemen().PrimarvardP;
+  assert.deepEqual(p.fel, []);
+  const t = p.roller.find((r) => r.tillval);
+  assert.deepEqual([t.aktor, t.tillvalFor], ['POT2Engagemangsindexerad', 'POT2Producent']);
+  assert.ok(p.api.some((a) => a.lage === 'client' && a.typ === 'EpisodeOfCare' && a.roller.includes(t.id)));
+  assert.deepEqual(p.scenarier.filter((x) => x.roll === t.id).map((x) => x.anvandningsfall), ['AnmalaEngagemangPOT2']);
+  // Utan tillvalet: inget engagemangskrav.
+  const sys = loadSystems(root).find((x) => x.system === 'PrimarvardP');
+  const utan = analyseSystem({ ...sys, tillval: [] }, loadManifests(loadWorkspace(root)), root, rules.system);
+  assert.ok(!utan.scenarier.some((x) => x.anvandningsfall === 'AnmalaEngagemangPOT2'));
+  assert.ok(!utan.api.some((a) => a.typ === 'EpisodeOfCare' && a.lage === 'client' && a.interaktioner.some((i) => i.kod === 'create')));
+  // Uppmärksamhet är valfri och nuläget saknar Flag: inte vald, inget serverkrav.
+  assert.ok(!p.api.some((a) => a.lage === 'server' && a.typ === 'Flag'));
 });
 
 test('system: gapet räknas om för ett urval av roller', () => {
@@ -288,12 +316,21 @@ test('system: gapet räknas om för ett urval av roller', () => {
   assert.equal(apiStatus(enc, new Set(['inera.tjanst.npo#NPOKonsument'])), null);
 });
 
-test('system: anslutningar i tjänstekatalogen jämförs med rollerna', () => {
+test('system: registreringar i T2-katalogerna jämförs med rollerna', () => {
   const s = systemen();
-  const f = Object.fromEntries(s.JournalX.anslutningar.forvantade.map((x) => [x.roll.split('#')[1], x.status]));
-  assert.deepEqual(f, { NPOKallsystem: 'registrerad', Journal1177KallsystemMarkande: 'annan version' });
-  assert.deepEqual(s.LabbsystemL.anslutningar.forvantade.map((x) => x.status), ['saknas']);
-  assert.deepEqual(s.Invanarplattform.anslutningar.forvantade, []);
+  const f = (sys) => s[sys].anslutningar.forvantade.map((x) => `${x.roll.split('#')[1]} ${x.typ}${x.informationsmangd ? ` ${x.informationsmangd}` : ''}: ${x.status}`);
+  assert.deepEqual(f('JournalX'), [
+    'NPOKallsystem medlemskap: registrerad',
+    'NPOKonsument medlemskap: registrerad',
+    'Journal1177KallsystemMarkande medlemskap: saknas',
+    'NPOKallsystem anslutningspunkt VardkontaktInfo: registrerad',
+    'Journal1177KallsystemMarkande anslutningspunkt VardkontaktInfo: annan version',
+    'Journal1177KallsystemMarkande anslutningspunkt FastKontaktInfo: saknas',
+    'Journal1177KallsystemMarkande anslutningspunkt LabbsvarInfo: saknas',
+  ]);
+  assert.ok(s.LabbsystemL.anslutningar.forvantade.every((x) => x.status === 'saknas'));
+  assert.deepEqual(f('Invanarplattform'), ['Journal1177Invanartjanst medlemskap: registrerad']);
+  assert.deepEqual(f('PrimarvardP').filter((x) => !x.endsWith('registrerad')), ['POT2Producent anslutningspunkt LakemedelInfo: saknas']);
   assert.ok(s.LabbsystemL.api.every((a) => a.status === 'okänt'));
 });
 
@@ -301,7 +338,9 @@ test('system: testlistan har varje krav en gång, med alla roller som ställer d
   const x = systemen().JournalX;
   const elm = x.testlista.filter((t) => t.kategori === 'Elementkrav' && t.text.startsWith('SHALL:populate subject i FastKontakt'));
   assert.equal(elm.length, 1);
-  assert.equal(elm[0].roller.length, 2);
+  // NPÖ:s Fast kontakt är inte vald av JournalX, så bara 1177 Journal ställer kravet.
+  assert.deepEqual(elm[0].roller, ['inera.tjanst.journal1177#Journal1177KallsystemMarkande']);
+  assert.ok(x.testlista.some((t) => t.kategori === 'Anslutning' && t.text.startsWith('Aktivt medlemskap')));
   assert.ok(x.testlista.some((t) => t.kategori === 'Scenario' && t.text.startsWith('Ansluta källsystem till SVOD')));
 });
 
@@ -327,21 +366,82 @@ test('mocken gör bara det ändpunktens CapabilityStatement säger', async () =>
   }
 });
 
-test('federationstest: förutsättningar stänger anslutningsgapet, användningsfallen visar systemens gap', async () => {
+test('federationstest: förutsättningar stänger registreringsgapet, användningsfallen visar systemens gap', async () => {
   const w = loadWorkspace(root);
   const r = await testaFederation({ ws: w, manifests: loadManifests(w), systems: loadSystems(root), root, regler: rules.system });
   const status = (sys, uc, roll) => r.korningar.find((k) => k.system === sys && k.anvandningsfall === uc && k.roll.endsWith(`#${roll}`))?.status;
-  // Anslutning: Journalsystem X registrerar 1177-rollen med rätt version, Labbsystem L registrerar sig.
-  const ans = (lista, sys) => lista.find((x) => x.system === sys).anslutningar.map((x) => x.status);
-  assert.deepEqual(ans(r.fore, 'JournalX'), ['registrerad', 'annan version']);
-  assert.deepEqual(ans(r.efter, 'JournalX'), ['registrerad', 'registrerad']);
-  assert.deepEqual(ans(r.efter, 'LabbsystemL'), ['registrerad']);
+  const gap = (lista, sys) => lista.find((x) => x.system === sys).anslutningar.filter((x) => x.status !== 'registrerad').length;
+  // Medlemskap, anslutningspunkter och tjänsteinstanser registreras av förutsättningarna.
+  assert.equal(gap(r.fore, 'JournalX'), 4);
+  for (const sys of ['JournalX', 'LabbsystemL', 'PrimarvardP', 'Invanarplattform']) assert.equal(gap(r.efter, sys), 0, sys);
   // Gap som visar sig vid körning.
   assert.equal(status('JournalX', 'AnslutaKonsumentSVOD', 'NPOKonsument'), 'fel');
   const po = r.korningar.find((k) => k.system === 'JournalX' && k.anvandningsfall === 'VardpersonalPatientoversikt' && k.roll.endsWith('#NPOKallsystem'));
-  assert.deepEqual(po.steg.filter((s) => s.status === 'fel').map((s) => s.detaljer[0].http), [400, 405]);
+  assert.deepEqual(po.steg.filter((s) => s.status === 'fel').map((s) => s.detaljer[0].http), [400]);
+  // Fast kontakt är inte vald av JournalX: steget hoppas över.
+  assert.ok(po.steg.some((s) => s.status === 'hoppad' && /inte valt informationsmängden Fast kontakt/.test(s.text)));
   assert.equal(status('JournalX', 'TaDelAvLabbsvar', 'Journal1177KallsystemMarkande'), 'ok');
   assert.equal(status('LabbsystemL', 'TaDelAvLabbsvar', 'Journal1177KallsystemFiltrerande'), 'okänt');
-  // Invävd loggning når loggtjänsten: en AuditEvent per hämtning i två körningar.
-  assert.equal(r.stod.find((x) => x.aktor === 'SVODLoggtjanst').resurser.AuditEvent, 4);
+  // PO-T2: källsystemet hittas med T1, är medlem, har engagemang och anropas med åtkomstintyg.
+  assert.equal(status('PrimarvardP', 'HamtaPatientoversikt', 'POT2Producent'), 'ok');
+  assert.equal(status('PrimarvardP', 'AnmalaEngagemangPOT2', 'POT2Engagemangsindexerad'), 'ok');
+  const pp = r.korningar.find((k) => k.system === 'PrimarvardP' && k.anvandningsfall === 'HamtaPatientoversikt' && k.roll.endsWith('#POT2Producent'));
+  assert.deepEqual(pp.steg.filter((s) => ['Condition', 'MedicationStatement'].includes(s.resurstyp)).map((s) => s.detaljer.map((d) => d.http)), [[200], [200]]);
+  // Konsumentrollen saknar klientförmåga för Flag.
+  assert.equal(status('PrimarvardP', 'HamtaPatientoversikt', 'POT2Visning'), 'fel');
+  // Invävd loggning når loggtjänsten.
+  assert.ok(r.stod.find((x) => x.aktor === 'SVODLoggtjanst').resurser.AuditEvent >= 2);
+});
+
+test('mocken: T2-filter, åtkomstintyg och skyddade ändpunkter', async () => {
+  const mock = new MockFederation();
+  await mock.starta();
+  try {
+    const cs = (typ, sp) => ({ resourceType: 'CapabilityStatement', kind: 'instance', rest: [{ mode: 'server', resource: [{ type: typ, interaction: [{ code: 'search-type' }], searchParam: sp.map((name) => ({ name })) }] }] });
+    const ext = 'https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/implements';
+    mock.laggTill('/tk', cs('Endpoint', ['implements', 'status']), [
+      { resourceType: 'Endpoint', id: 'a', status: 'active', extension: [{ url: ext, valueCanonical: 'http://x/A|1.0' }] },
+      { resourceType: 'Endpoint', id: 'b', status: 'off', extension: [{ url: ext, valueCanonical: 'http://x/A' }] },
+    ]);
+    mock.laggTill('/intyg', cs('Endpoint', []), [], { utfardare: true });
+    mock.laggTill('/prod', cs('Condition', ['patient']), [
+      { resourceType: 'Condition', id: 'c1', subject: { identifier: { system: 'pnr', value: '1' } } },
+      { resourceType: 'Condition', id: 'c2', subject: { identifier: { system: 'pnr', value: '2' } } },
+    ], { skyddad: true });
+    assert.equal((await fhir(`${mock.bas}/tk/Endpoint?implements=http://x/A&status=active`)).json.total, 1);
+    assert.equal((await fhir(`${mock.bas}/prod/Condition`)).status, 401);
+    assert.equal((await fhir(`${mock.bas}/prod/metadata`)).status, 200);
+    const token = (await fhir(`${mock.bas}/intyg/token`, { metod: 'POST' })).json.access_token;
+    const svar = await fhir(`${mock.bas}/prod/Condition?patient.identifier=pnr|2`, { headers: { authorization: `Bearer ${token}` } });
+    assert.deepEqual(svar.json.entry.map((e) => e.resource.id), ['c2']);
+  } finally {
+    await mock.stoppa();
+  }
+});
+
+test('läsadaptern härleder system ur T2-katalogerna', async () => {
+  const w = loadWorkspace(root);
+  const manifests = loadManifests(w);
+  // Den mockade federationen står här för en verklig realisering.
+  const fed = await byggFederation({ ws: w, manifests, systems: loadSystems(root), root });
+  try {
+    const sys = await systemFranKatalog(fed.miljo, manifests, ['inera.tjanst.pot2'], rules.system);
+    const p = sys.find((x) => x.system === 'region-exempel');
+    assert.deepEqual(p.roller, [{ tjanst: 'inera.tjanst.pot2', aktor: 'POT2Producent' }]);
+    assert.deepEqual(p.informationsmangder, { 'inera.tjanst.pot2': ['DiagnosInfo'] });
+    assert.deepEqual(p.tillval, ['POT2Engagemangsindexerad']);
+    assert.deepEqual(p.organisation, { namn: 'Region Exempel', hsaId: 'SE2321000099-EXMP' });
+  } finally {
+    await fed.mock.stoppa();
+  }
+});
+
+test('tjänstens specifikationer jämförs med de externa de motsvarar', () => {
+  const j = jamforSpecifikationer(root, lasMiljo(root, 'infopeak'), loadManifests(loadWorkspace(root)), ['inera.tjanst.pot2']);
+  assert.deepEqual(j.map((x) => x.informationsmangd), ['DiagnosInfo', 'LakemedelInfo', 'UppmarksamhetInfo']);
+  const diagnos = j[0].avvikelser.map((a) => `${a.niva}: ${a.text}`);
+  assert.ok(diagnos.includes('varning: Den externa specifikationen är FHIR 4.0.1, tjänsten FHIR 5.0.0'));
+  assert.ok(diagnos.includes('varning: Condition: den externa har sökparametrarna recorder'));
+  assert.ok(diagnos.some((x) => x.startsWith('varning: Den externa kräver även Practitioner')));
+  assert.ok(j.every((x) => !x.avvikelser.some((a) => a.niva === 'fel')));
 });

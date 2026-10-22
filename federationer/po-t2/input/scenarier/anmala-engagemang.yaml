@@ -1,0 +1,13 @@
+# Förutsättning för källsystem med tillvalet engagemangsindexerad.
+anvandningsfall: AnmalaEngagemangPOT2
+nyckel: POT2-EI
+titel: Anmäla engagemang (engagemangsindexerat källsystem)
+syfte: Ett engagemangsindexerat källsystem håller sina engagemang aktuella i engagemangsindexet.
+aktorer:
+  kalla: POT2Engagemangsindexerad
+  index: Engagemangsindex
+steg:
+  - inkludera: AnmalaEngagemang
+    roller:
+      producent: kalla
+      index: index

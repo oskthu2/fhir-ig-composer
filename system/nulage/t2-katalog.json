@@ -1,0 +1,525 @@
+{
+  "resourceType": "Bundle",
+  "id": "t2-katalog",
+  "type": "collection",
+  "timestamp": "2026-10-20T08:00:00+02:00",
+  "entry": [
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/Organization/inera",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "inera",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-organisation"
+          ]
+        },
+        "active": true,
+        "name": "Inera AB",
+        "identifier": [
+          {
+            "system": "urn:oid:1.2.752.29.4.19",
+            "value": "SE5565594230-INERA"
+          }
+        ],
+        "type": [
+          {
+            "text": "Nationell tjänsteleverantör och federationsoperatör"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/Organization/fed-svod",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "fed-svod",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-organisation"
+          ]
+        },
+        "active": true,
+        "name": "SVOD",
+        "type": [
+          {
+            "text": "Informationsfederation"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/Organization/fed-individuell",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "fed-individuell",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-organisation"
+          ]
+        },
+        "active": true,
+        "name": "Individuell tillgång",
+        "type": [
+          {
+            "text": "Informationsfederation"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/Organization/fed-pot2",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "fed-pot2",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-organisation"
+          ]
+        },
+        "active": true,
+        "name": "Patientöversiktsfederationen",
+        "type": [
+          {
+            "text": "Informationsfederation"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/Organization/region-exempel",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "region-exempel",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-organisation"
+          ]
+        },
+        "active": true,
+        "name": "Region Exempel",
+        "identifier": [
+          {
+            "system": "urn:oid:1.2.752.29.4.19",
+            "value": "SE2321000099-EXMP"
+          }
+        ],
+        "type": [
+          {
+            "text": "Region/vårdgivare"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/Organization/labbet-l",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "labbet-l",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-organisation"
+          ]
+        },
+        "active": true,
+        "name": "Labbet L AB",
+        "identifier": [
+          {
+            "system": "urn:oid:1.2.752.29.4.19",
+            "value": "SE5560000001-LABL"
+          }
+        ],
+        "type": [
+          {
+            "text": "Privat vårdgivare"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/OrganizationAffiliation/aff-svod-operator",
+      "resource": {
+        "resourceType": "OrganizationAffiliation",
+        "id": "aff-svod-operator",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-medlemskap"
+          ]
+        },
+        "extension": [],
+        "active": true,
+        "period": {
+          "start": "2026-01-01"
+        },
+        "organization": {
+          "reference": "Organization/fed-svod"
+        },
+        "participatingOrganization": {
+          "reference": "Organization/inera"
+        },
+        "code": [
+          {
+            "coding": [
+              {
+                "system": "https://fhir.inera.se/ig/katalogtjanster/CodeSystem/federationsroller",
+                "code": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/OrganizationAffiliation/aff-individuell-operator",
+      "resource": {
+        "resourceType": "OrganizationAffiliation",
+        "id": "aff-individuell-operator",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-medlemskap"
+          ]
+        },
+        "extension": [],
+        "active": true,
+        "period": {
+          "start": "2026-01-01"
+        },
+        "organization": {
+          "reference": "Organization/fed-individuell"
+        },
+        "participatingOrganization": {
+          "reference": "Organization/inera"
+        },
+        "code": [
+          {
+            "coding": [
+              {
+                "system": "https://fhir.inera.se/ig/katalogtjanster/CodeSystem/federationsroller",
+                "code": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/OrganizationAffiliation/aff-pot2-operator",
+      "resource": {
+        "resourceType": "OrganizationAffiliation",
+        "id": "aff-pot2-operator",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-medlemskap"
+          ]
+        },
+        "extension": [],
+        "active": true,
+        "period": {
+          "start": "2026-01-01"
+        },
+        "organization": {
+          "reference": "Organization/fed-pot2"
+        },
+        "participatingOrganization": {
+          "reference": "Organization/inera"
+        },
+        "code": [
+          {
+            "coding": [
+              {
+                "system": "https://fhir.inera.se/ig/katalogtjanster/CodeSystem/federationsroller",
+                "code": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/OrganizationAffiliation/aff-individuell-inera",
+      "resource": {
+        "resourceType": "OrganizationAffiliation",
+        "id": "aff-individuell-inera",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-medlemskap"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/tillitsniva",
+            "valueCode": "loa3"
+          }
+        ],
+        "active": true,
+        "period": {
+          "start": "2026-01-01"
+        },
+        "organization": {
+          "reference": "Organization/fed-individuell"
+        },
+        "participatingOrganization": {
+          "reference": "Organization/inera"
+        },
+        "code": [
+          {
+            "coding": [
+              {
+                "system": "https://fhir.inera.se/ig/katalogtjanster/CodeSystem/federationsroller",
+                "code": "member"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/OrganizationAffiliation/aff-svod-region-exempel",
+      "resource": {
+        "resourceType": "OrganizationAffiliation",
+        "id": "aff-svod-region-exempel",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-medlemskap"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/tillitsniva",
+            "valueCode": "loa3"
+          }
+        ],
+        "active": true,
+        "period": {
+          "start": "2026-01-01"
+        },
+        "organization": {
+          "reference": "Organization/fed-svod"
+        },
+        "participatingOrganization": {
+          "reference": "Organization/region-exempel"
+        },
+        "code": [
+          {
+            "coding": [
+              {
+                "system": "https://fhir.inera.se/ig/katalogtjanster/CodeSystem/federationsroller",
+                "code": "member"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/fed-katalog/OrganizationAffiliation/aff-pot2-region-exempel",
+      "resource": {
+        "resourceType": "OrganizationAffiliation",
+        "id": "aff-pot2-region-exempel",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-medlemskap"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/tillitsniva",
+            "valueCode": "loa3"
+          }
+        ],
+        "active": true,
+        "period": {
+          "start": "2026-01-01"
+        },
+        "organization": {
+          "reference": "Organization/fed-pot2"
+        },
+        "participatingOrganization": {
+          "reference": "Organization/region-exempel"
+        },
+        "code": [
+          {
+            "coding": [
+              {
+                "system": "https://fhir.inera.se/ig/katalogtjanster/CodeSystem/federationsroller",
+                "code": "member"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/tjanstekatalog/Endpoint/ep-journalx",
+      "resource": {
+        "resourceType": "Endpoint",
+        "id": "ep-journalx",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-anslutningspunkt"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/implements",
+            "valueCanonical": "https://fhir.inera.se/ig/npo/CapabilityStatement/VardkontaktAPI|0.1.0"
+          },
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/implements",
+            "valueCanonical": "https://fhir.inera.se/ig/journal1177/CapabilityStatement/VardkontaktAPI|0.0.9"
+          },
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/atkomstintygsutfardare",
+            "valueReference": {
+              "reference": "Organization/inera"
+            }
+          }
+        ],
+        "status": "active",
+        "name": "Journalsystem X",
+        "connectionType": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+                "code": "hl7-fhir-rest"
+              }
+            ]
+          }
+        ],
+        "managingOrganization": {
+          "reference": "Organization/region-exempel"
+        },
+        "address": "https://fhir.journalx.region-exempel.se/r5"
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/tjanstekatalog/CapabilityStatement/cs-ep-journalx",
+      "resource": {
+        "resourceType": "CapabilityStatement",
+        "id": "cs-ep-journalx",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-tjansteinstans"
+          ]
+        },
+        "status": "active",
+        "date": "2026-09-15",
+        "kind": "instance",
+        "instantiates": [
+          "https://fhir.inera.se/ig/npo/CapabilityStatement/VardkontaktAPI|0.1.0",
+          "https://fhir.inera.se/ig/journal1177/CapabilityStatement/VardkontaktAPI|0.0.9"
+        ],
+        "fhirVersion": "5.0.0",
+        "format": [
+          "json"
+        ],
+        "implementation": {
+          "description": "Journalsystem X",
+          "url": "https://fhir.journalx.region-exempel.se/r5",
+          "custodian": {
+            "reference": "Organization/region-exempel"
+          }
+        }
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/tjanstekatalog/Endpoint/ep-primarvard-p",
+      "resource": {
+        "resourceType": "Endpoint",
+        "id": "ep-primarvard-p",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-anslutningspunkt"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/engagemangsindexerad",
+            "valueBoolean": true
+          },
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/implements",
+            "valueCanonical": "https://fhir.inera.se/ig/patientoversikt/CapabilityStatement/exempel-diagnoser-api|0.1.0"
+          },
+          {
+            "url": "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/atkomstintygsutfardare",
+            "valueReference": {
+              "reference": "Organization/inera"
+            }
+          }
+        ],
+        "status": "active",
+        "name": "Primärvårdssystem P",
+        "connectionType": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+                "code": "hl7-fhir-rest"
+              }
+            ]
+          }
+        ],
+        "managingOrganization": {
+          "reference": "Organization/region-exempel"
+        },
+        "address": "https://fhir.primarvard-p.region-exempel.se/fhir"
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/tjanstekatalog/CapabilityStatement/cs-ep-primarvard-p",
+      "resource": {
+        "resourceType": "CapabilityStatement",
+        "id": "cs-ep-primarvard-p",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/katalog-tjansteinstans"
+          ]
+        },
+        "status": "active",
+        "date": "2026-09-15",
+        "kind": "instance",
+        "instantiates": [
+          "https://fhir.inera.se/ig/patientoversikt/CapabilityStatement/exempel-diagnoser-api|0.1.0"
+        ],
+        "fhirVersion": "5.0.0",
+        "format": [
+          "json"
+        ],
+        "implementation": {
+          "description": "Primärvårdssystem P",
+          "url": "https://fhir.primarvard-p.region-exempel.se/fhir",
+          "custodian": {
+            "reference": "Organization/region-exempel"
+          }
+        }
+      }
+    },
+    {
+      "fullUrl": "https://t2.inera.se/engagemangsindex/EpisodeOfCare/eng-anna-region-exempel",
+      "resource": {
+        "resourceType": "EpisodeOfCare",
+        "id": "eng-anna-region-exempel",
+        "meta": {
+          "profile": [
+            "https://fhir.inera.se/ig/katalogtjanster/StructureDefinition/engagemang-minimal"
+          ]
+        },
+        "status": "active",
+        "patient": {
+          "identifier": {
+            "system": "http://electronichealth.se/identifier/personnummer",
+            "value": "191212121212"
+          }
+        },
+        "managingOrganization": {
+          "identifier": {
+            "system": "urn:oid:1.2.752.29.4.19",
+            "value": "SE2321000099-EXMP"
+          }
+        }
+      }
+    }
+  ]
+}

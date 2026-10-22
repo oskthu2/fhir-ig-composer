@@ -1,0 +1,134 @@
+{
+  "resourceType": "CapabilityStatement",
+  "id": "primarvard-p",
+  "status": "active",
+  "date": "2026-10-01",
+  "kind": "instance",
+  "software": {
+    "name": "Primärvårdssystem P",
+    "version": "7.1"
+  },
+  "implementation": {
+    "description": "Primärvårdssystem P, Region Exempel",
+    "url": "https://fhir.primarvard-p.region-exempel.se/fhir"
+  },
+  "fhirVersion": "5.0.0",
+  "format": [
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "security": {
+        "service": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/restful-security-service",
+                "code": "OAuth"
+              }
+            ]
+          }
+        ]
+      },
+      "resource": [
+        {
+          "type": "Condition",
+          "interaction": [
+            {
+              "code": "search-type"
+            },
+            {
+              "code": "read"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "reference"
+            }
+          ]
+        },
+        {
+          "type": "MedicationStatement",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "reference"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "client",
+      "resource": [
+        {
+          "type": "Endpoint",
+          "interaction": [
+            {
+              "code": "create"
+            },
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": []
+        },
+        {
+          "type": "CapabilityStatement",
+          "interaction": [
+            {
+              "code": "create"
+            }
+          ],
+          "searchParam": []
+        },
+        {
+          "type": "EpisodeOfCare",
+          "interaction": [
+            {
+              "code": "create"
+            },
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": []
+        },
+        {
+          "type": "OrganizationAffiliation",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": []
+        },
+        {
+          "type": "Condition",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": []
+        },
+        {
+          "type": "MedicationStatement",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": []
+        }
+      ]
+    }
+  ]
+}

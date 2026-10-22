@@ -1,0 +1,43 @@
+# Användningsfall i byggblocket. Federationens T2-mönster vävs in när det
+# ingår i en tjänst.
+anvandningsfall: HamtaPatientoversikt
+nyckel: POT
+titel: Vårdpersonal tar del av patientens diagnoser, läkemedel och uppmärksamhetsinformation
+syfte: >-
+  Vårdpersonal ska få en samlad, källmärkt bild av patientens diagnoser,
+  läkemedel och uppmärksamhetsinformation hos alla vårdgivare där patienten
+  har information.
+
+aktorer:
+  vardpersonal: POVardpersonal
+  konsument: POKonsument
+  producent: POProducent
+
+informationsbehov:
+  diagnos: DiagnosInfo
+  lakemedel: LakemedelInfo
+  uppmarksamhet: UppmarksamhetInfo
+
+steg:
+  - titel: Vårdpersonalen öppnar patientöversikten
+    fran: vardpersonal
+    till: konsument
+  - titel: Konsumenten söker patientens diagnoser
+    fran: konsument
+    till: producent
+    operation: search-type
+    hamtar: diagnos
+  - titel: Konsumenten söker patientens läkemedel
+    fran: konsument
+    till: producent
+    operation: search-type
+    hamtar: lakemedel
+  - titel: Konsumenten söker patientens uppmärksamhetsinformation
+    fran: konsument
+    till: producent
+    operation: search-type
+    hamtar: uppmarksamhet
+    krav: Konsumenten SKA bara söka uppmärksamhetsinformation hos producenter som implementerar informationsmängden.
+  - titel: Konsumenten visar översikten källmärkt
+    fran: konsument
+    till: vardpersonal

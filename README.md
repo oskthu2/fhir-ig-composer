@@ -10,10 +10,13 @@ Allt är FHIR R5. Arv uttrycks med FHIR:s egna mekanismer (`Parent`, `imposeProf
 
 Tjänster i prototypen:
 
-| | Patientöversikt | Labbsvar |
-|---|---|---|
-| **SVOD** | NPÖ | *kandidat* |
-| **Individuell tillgång** | 1177 Journal | 1177 Journal |
+| | Patientöversikt | Labbsvar | Patientöversikt (T2) |
+|---|---|---|---|
+| **SVOD** | NPÖ | *kandidat* | |
+| **Individuell tillgång** | 1177 Journal | 1177 Journal | |
+| **Patientöversiktsfederationen (T2)** | | | Patientöversikt (T2) |
+
+Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak och kan testas mot den (se *Två lägen*).
 
 (`node verktyg/ig-composer.mjs matris` tar fram matrisen ur IG:arna.)
 
@@ -73,17 +76,33 @@ I matrisvyn har varje tjänst och byggblock fliken **Användningsfall** med sekv
 
 Kedjan i FHIR: `ExampleScenario` → `Requirements` (per aktör) → `satisfiedBy` profil och `CapabilityStatement` → tjänsteaktör (`ActorDefinition.derivedFrom`) → i tjänstekatalogen `TKAPIInstance.instantiates` → ändpunkt.
 
-## Förutsättningar och stödtjänster
+## Förutsättningar och stödtjänster: T2-mönstret
 
-Att delta i en federation är också användningsfall. En federation anger dem med extensionen `forutsattning`, och de ingår automatiskt i varje tjänst i federationen:
+Alla federationer bygger på samma samverkansmönster (RIVTA T2), som stödtjänsten **T2-samverkan** (`stodtjanster/t2`, `inera.st.t2`) beskriver. Den har stödtjänsterna *tjänstekatalog*, *federationsmedlemskatalog*, *engagemangsindex*, *åtkomstintygstjänst* och *federationsoperatör*. Deras förmågor instansierar (`instantiates`) katalogtjänsternas publicerade specifikationer. Den har också deltagarrollerna `TjanstekatalogRegistrerare`, `T2Konsument`, `Engagemangsproducent` och `Federationsmedlem`, och flödena:
 
-| Federation | Förutsättning | Innehåll |
-|---|---|---|
-| SVOD | Ansluta källsystem till SVOD | inkluderar *Registrera ändpunkt och API-instanser i tjänstekatalogen*, anmäla patienter till patientindex |
-| SVOD | Ansluta konsument till SVOD | prenumerera på ny data |
-| Individuell tillgång | Ansluta källsystem för individuell tillgång | inkluderar registreringen; invånartjänsten hämtar källsystemets CapabilityStatement |
+| Användningsfall / delflöde | Innehåll |
+|---|---|
+| Bli medlem | ansökan; operatören registrerar organisationen och medlemskapet i federationsmedlemskatalogen |
+| Registrera ändpunkt | anslutningspunkt med `implements` per informationsmängd, och tjänsteinstans per specifikation |
+| Anmäla engagemang | producenten anmäler engagemang (patient + vårdgivare) |
+| T2-uppslag *(delflöde)* | tjänstesökning (T1) på specifikationen, medlemsverifiering (F1), åtkomstintyg |
+| Engagemangsuppslag *(delflöde)* | konsumenten hämtar patientens engagemang; producenter utan engagemangsindexering anropas alltid |
 
-**Stödtjänster** (`ig-roll = stodtjanst`) är infrastrukturtjänster med eget API som federationerna bygger på. Tjänstekatalogen är den första. Den har aktörerna `Tjanstekatalog` och `TjanstekatalogRegistrerare` och användningsfallet `RegistreraAndpunkt`. Federationernas källsystemsroller härleds från registreraren, så varje tjänsts källsystem får kravet att registrera sig. Aktörer som tillhandahålls av en federation eller stödtjänst (katalog, patientindex, loggtjänst …) markeras med `* insert Stodtjanst` och spelas inte av tjänsternas system.
+Federationerna väver in mönstret med `flodesmonster`: `fore` (engagemangsuppslag, en gång med `foreEnGang`), `foreVarje` (T2-uppslag före varje hämtning) och `efter` (t.ex. SVOD:s spärr och loggning). Förutsättningarna anges med `forutsattning` och ingår i varje tjänst i federationen:
+
+| Federation | Förutsättningar |
+|---|---|
+| SVOD | Bli medlem, Ansluta källsystem (inkluderar Registrera ändpunkt), Anmäla engagemang (tillval), Ansluta konsument |
+| Individuell tillgång | Bli medlem, Ansluta källsystem |
+| Patientöversiktsfederationen (T2) | Bli medlem, Ansluta källsystem, Anmäla engagemang (tillval) |
+
+Federationernas källsystemsroller härleds från `TjanstekatalogRegistrerare` och `Federationsmedlem`, och konsumentrollerna från `T2Konsument` och `Federationsmedlem`. Aktörer som tillhandahålls av en federation eller stödtjänst markeras med `* insert Stodtjanst` och spelas inte av tjänsternas system.
+
+**Tillval** är roller som ett system kan anta utöver en grundroll: `* insert TillvalFor(SVODKallsystem)` på `SVODEngagemangsindexerad`. Ett scenario med en tillvalsroll spelas av de tjänsteaktörer som spelar grundrollen, och det är systemet som väljer tillvalet.
+
+### Informationsmängder
+
+En tjänst får en genererad specifikation per **informationsmängd**: per exponerad profil som realiserar ett informationsbehov (`<Informationsbehov>API`, t.ex. `VardkontaktAPI`). Det är mot den en anslutningspunkt registreras och T1 söker. Om informationsbehovet motsvarar en externt publicerad specifikation (`* insert ExternSpecifikation(url|version)` på den logiska modellen) instansierar den genererade specifikationen den, och registreringen sker mot den externa. En informationsmängd är obligatorisk, eller valfri med extensionen `valfri-informationsmangd` på tjänsten (NPÖ: Fast kontakt, Patientöversikt (T2): Uppmärksamhetsinformation). Källsystemens förmågor importerar de obligatoriska.
 
 I skissformatet kan ett användningsfall **inkludera** ett annat:
 
@@ -95,7 +114,7 @@ steg:
 
 Den inkluderade aktören binds till en aktör i det inkluderande fallet, som då spelar båda rollerna. I FHIR blir det `step.workflow`.
 
-Förmågor läses och genereras per `rest`-block, alltså per läge. Ett källsystem är server för kliniskt innehåll men klient mot tjänstekatalogen och patientindex. Täckningskontrollen kräver interaktionen som klient hos avsändaren och som server hos mottagaren.
+Förmågor läses och genereras per `rest`-block, alltså per läge. Ett källsystem är server för kliniskt innehåll men klient mot tjänstekatalogen och engagemangsindexet. Täckningskontrollen kräver interaktionen som klient hos avsändaren och som server hos mottagaren.
 
 ## Systemperspektiv: summan av krav, test och gap
 
@@ -109,9 +128,13 @@ roller:
   - { tjanst: inera.tjanst.npo, aktor: NPOKallsystem }
   - { tjanst: inera.tjanst.npo, aktor: NPOKonsument }
   - { tjanst: inera.tjanst.journal1177, aktor: Journal1177KallsystemMarkande }
+organisation: { namn: Region Exempel, hsaId: SE2321000099-EXMP }
 nulage:
-  formaga: nulage/journalx-metadata.json          # CapabilityStatement kind=instance (GET [bas]/metadata)
-  anslutningar: nulage/tjanstekatalog-export.json # API-instanser (TKAPIInstance) från tjänstekatalogen
+  formaga: nulage/journalx-metadata.json  # CapabilityStatement kind=instance (GET [bas]/metadata)
+  katalog: nulage/t2-katalog.json         # T2-katalogerna: organisationer, medlemskap, anslutningspunkter, tjänsteinstanser, engagemang
+tillval: []                               # t.ex. [SVODEngagemangsindexerad]
+informationsmangder:                      # valda per tjänst; utan val: obligatoriska + valfria som nuläget har
+  inera.tjanst.npo: [VardkontaktInfo]
 ```
 
 `ig-composer system` (efter `bygg`) tar fram följande per system, och skriver `rapport/<system>.md`:
@@ -119,46 +142,61 @@ nulage:
 - **Summan av API-krav** per läge och resurstyp, över alla roller. Interaktioner, sökparametrar och profiler kommer från tjänsteaktörernas förmågor och allt de importerar. Den mest specifika profilen räcker: `VardkontaktNPO` ersätter NPÖ:s `Vardkontakt`. Samma profil i två tjänster (samma `kopierad-fran`) visas som en profil med två kanoniska URL:er, och systemet måste ange båda.
 - **Elementkrav, verksamhetskrav och scenariosteg** som systemet deltar i, inklusive förutsättningarna.
 - **Gap mot nuläget:** saknade resurstyper, interaktioner, sökparametrar och profiler i systemets CapabilityStatement.
-- **Anslutningar:** en roll som härleds från registreraren förväntas ha en API-instans i tjänstekatalogen som följer tjänstens API-specifikation (`url|version`). Status: registrerad, annan version eller saknas.
+- **Informationsmängder och tillval:** per roll vilka informationsmängder som är obligatoriska, valfria och valda. En vald informationsmängd ger serverkrav, elementkrav och scenariosteg; en valfri som inte är vald ger inga. Ett tillval blir en egen roll med sina förmågor, krav och förutsättningar.
+- **Registreringar i T2-katalogerna:** medlemskap i federationen per medlemsroll, en anslutningspunkt (med tjänsteinstans) per vald informationsmängd per registrerarroll, och engagemangsindexering för tillvalet. Status: registrerad, annan version eller saknas.
 - **Testlista:** varje krav en gång, med de roller som ställer det. API-krav och anslutningar får status från nuläget, övriga krav är manuella.
 
 I matrisvyn finns systemen under **System**. Välj vilka av systemets roller som ska summeras, så räknas kraven, gapet och testlistan om. API-kraven kan grupperas per resurstyp, roll eller status, och testlistan kan laddas ner.
 
 Exempelsystemen visar olika lägen:
-- **Journalsystem X:** CareTeam saknas som server; sökparametern `date` och 1177:s Vårdkontakt-profil saknas; Subscription saknas; registreringen för 1177 gäller en äldre version.
-- **1177 invånarplattform:** inga gap.
-- **Labbsystem L:** inget nuläge inlämnat, så API-gapet är okänt, och registreringen saknas.
+- **Journalsystem X:** CareTeam saknas som server (1177 Journal kräver Fast kontakt; i NPÖ är den valfri och inte vald); sökparametern `date` och 1177:s Vårdkontakt-profil saknas; klientförmåga för T1, F1, engagemang och Subscription saknas; medlemskapet i Individuell tillgång saknas och 1177-registreringen gäller en äldre version.
+- **1177 invånarplattform:** klientförmåga för T2-uppslagen saknas.
+- **Labbsystem L:** inget nuläge inlämnat, så API-gapet är okänt; varken medlemskap eller registrering.
+- **Primärvårdssystem P:** källsystem och konsument i Patientöversikt (T2) med tillvalet engagemangsindexerad; läkemedel är inte registrerat än och uppmärksamhetsinformation inte vald.
 
-## Mockad federation
+## Två lägen: mockad federation och läsadapter
 
 ```sh
-node verktyg/ig-composer.mjs federation testa            # bygger mocken, kör och stänger
-node verktyg/ig-composer.mjs federation starta --port 4800   # låter mocken köra
+node verktyg/ig-composer.mjs federation testa                  # mockad federation: bygger, kör och stänger
+node verktyg/ig-composer.mjs federation starta --port 4800     # låter mocken köra
+node verktyg/ig-composer.mjs federation testa --mot infopeak   # läsläge mot referensrealiseringen
 ```
 
-`ig-composer` bygger en federation i minnet ur de komponerade IG:arna och systemregistret, i en HTTP-server med flera ändpunkter:
+Samma testkörare kör användningsfallen mot en *miljö*. Körningen går som en konsument enligt T2: engagemangsuppslag, tjänstesökning (T1) på informationsmängdens specifikation, medlemsverifiering (F1) och åtkomstintyg. Sedan anropas de producenter som återstår, med intyget som Bearer-token. Producenter som är engagemangsindexerade men saknar engagemang för patienten hoppas över, och för systemet under test anges varför det inte hittas.
+
+### Mockad federation
+
+`ig-composer` bygger en federation i minnet ur de komponerade IG:arna och systemregistret:
 
 | Ändpunkt | Vad | Kan |
 |---|---|---|
-| `/stod/<Aktör>` | Stödtjänster: tjänstekatalogen, patientindex, patientrelationstjänsten, loggtjänsten, prenumerationstjänsten | Det deras CapabilityStatements säger |
-| `/referens/<tjänst>/<Aktör>` | Referensimplementation per källsystemsroll | Summan av rollens server-krav. Data är tjänstens exempel. |
-| `/system/<System>` | Varje system i `system/` | Exakt det systemets nuläge (CapabilityStatement kind=instance) säger: andra interaktioner ger 405, andra sökparametrar 400, och utan nuläge svarar mocken 501 |
+| `/stod/<Aktör>` | Stödtjänster: tjänstekatalog, federationsmedlemskatalog, engagemangsindex, åtkomstintygstjänst (`POST token`), SVOD:s patientrelation, logg och prenumeration | Det deras CapabilityStatements säger; katalogerna filtrerar på T2:s sökparametrar |
+| `/referens/<tjänst>/<Aktör>` | Referensimplementation per källsystemsroll, medlem och registrerad för alla informationsmängder | Summan av rollens server-krav. Data är tjänstens exempel. Kräver åtkomstintyg. |
+| `/system/<System>` | Varje system i `system/` | Exakt det systemets nuläge säger: andra interaktioner ger 405, andra sökparametrar 400, utan nuläge 501. Kräver åtkomstintyg. |
 
-Tjänstekatalogen fylls med exporten (systemens nuvarande API-instanser, med adresser till mocken) och med referensimplementationerna. `federation testa` kör sedan:
-
-1. **Nuläge live:** systemens `/metadata` och katalogens API-instanser hämtas över HTTP och gapanalysen körs på dem.
-2. **Förutsättningarna** för varje system och roll, alltså anslutningen. Systemen registrerar ändpunkt och API-instanser i katalogen, anmäler patienter till patientindex och prenumererar. Det kräver att systemet har klientförmågan i sitt nuläge, och om nuläget saknas antas förmågan.
-3. **Användningsfallen** steg för steg som HTTP-anrop. Andra källsystem hittas via katalogen (API-instanser som följer tjänstens specifikation), så en konsument frågar alla registrerade källsystem, sig själv inräknat. De invävda stegen körs också: patientrelation, spärr och loggning.
-4. **Nuläge live igen**, så att anslutningarna före och efter förutsättningarna kan jämföras.
-
-Resultatet skrivs till `federation.json` och `rapport/federation.md`, och visas i matrisvyn under System → **Federationstest**. I exemplet:
-- Journalsystem X:s registrering för 1177 går från *annan version* till *registrerad*, och Labbsystem L blir registrerat.
-- Journalsystem X:s källsystem svarar 400 på `date` och 405 på CareTeam. Det får även NPÖ-konsumenter att se fel när de frågar alla källsystem.
-- Journalsystem X saknar klientförmågan för Subscription, så anslutningen som konsument misslyckas.
+Katalogerna fylls med systemens nuläge (`t2-katalog.json`, med adresser till mocken) och referensimplementationerna. `federation testa` kör nuläget live, sedan förutsättningarna, som skriver till katalogerna (det som redan finns skrivs inte igen), sedan användningsfallen och till sist nuläget live igen. Resultatet hamnar i `federation.json` och `rapport/federation.md`. I exemplet:
+- Förutsättningarna stänger registreringsgapen: medlemskap, anslutningspunkter per informationsmängd och tjänsteinstanser.
+- Journalsystem X svarar 400 på `date`. Som konsument saknar det klientförmågan för T1, F1 och engagemangsuppslaget.
+- Primärvårdssystem P hittas med T1, är medlem, har engagemang för testpatienten och svarar med åtkomstintyg. Som konsument saknar det klientförmåga för Flag.
 - Labbsystem L kan inte provas eftersom nuläget saknas.
-- Loggtjänsten tar emot en AuditEvent per hämtning.
 
-Mocken prövar flöden och kontrakt: interaktioner, sökparametrar, profiler som anges i `meta.profile`, och att mottagare går att hitta i katalogen. Den validerar inte resursernas innehåll mot profilerna.
+### Läsadapter mot infopeak
+
+`miljoer/infopeak.yaml` beskriver referensrealiseringen av T2 på `demo.inera.infopeak.se`: tokenadressen, katalogernas sökvägar, omskrivningen av anslutningspunkternas gatewayadresser, federationens organisation (`inera.fed.pot2` → `Organization/fed-po`), testpatienten och vilka tjänster som testas. Adaptern **skriver aldrig**. Förutsättningarna verifieras mot katalogerna: organisationen, medlemskapet, anslutningspunkten med de valda informationsmängderna, tjänsteinstansen och engagemanget.
+
+Systemen härleds ur katalogen. Varje organisation med en anslutningspunkt som implementerar någon av tjänstens informationsmängder (via `ExternSpecifikation`) blir ett system med källsystemsrollen, de informationsmängder den implementerar och tillvalet engagemangsindexerad om anslutningspunkten anger det. Resultatet för Patientöversikt (T2): **Demoregion** (diagnoser, läkemedel, uppmärksamhet) och **Grannregionen** (diagnoser, läkemedel; uppmärksamhet är valfri och hoppas över). Båda klarar förutsättningarna och patientöversikten.
+
+Körningen jämför också tjänstens specifikation per informationsmängd med den externa den motsvarar. Ögonblicksbilder (CC0) ligger i `externa/infopeak/`. Avvikelserna visar till exempel att de externa är FHIR 4.0.1, har sökparametern `recorder` och kräver även `Patient` och `Practitioner`. Resultatet skrivs till `federation-infopeak.json` och `rapport/federation-infopeak.md`, och i matrisvyn som *System i referensrealiseringen* med flikarna Federationstest och Specifikationer.
+
+Inga inloggningsuppgifter finns i repot. Katalogerna och producenterna nås med en token från realiseringens tokenadress. För att hämta nya ögonblicksbilder från IG-sajterna (basic auth) sätter man miljövariablerna:
+
+```sh
+INFOPEAK_ANVANDARE=… INFOPEAK_LOSENORD=… node verktyg/ig-composer.mjs externa hamta
+```
+
+I CI körs läsadaptern bara på begäran (`workflow_dispatch` med `infopeak: true`), så att bygget inte beror på en extern miljö.
+
+Testköraren prövar flöden och kontrakt: interaktioner, sökparametrar, profiler som anges i `meta.profile`, registreringar och att mottagare går att hitta. Den validerar inte resursernas innehåll mot profilerna.
 
 ## Interaktiv matrisvy
 
@@ -182,21 +220,26 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 ├── byggblock/
 │   ├── fastakontakter/        inera.bb.fastakontakter  (byggblock, intern)
 │   ├── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter
-│   └── labbsvar/              inera.bb.labbsvar        (byggblock, intern)
+│   ├── labbsvar/              inera.bb.labbsvar        (byggblock, intern)
+│   └── po-t2/                 inera.bb.pot2            (byggblock, intern) – diagnoser, läkemedel, uppmärksamhet
 ├── federationer/
-│   ├── svod/                  inera.fed.svod           (federation, intern)  – komponerar Tjänstekatalogen
-│   └── individuell/           inera.fed.individuell    (federation, intern)  – komponerar Tjänstekatalogen
+│   ├── svod/                  inera.fed.svod           (federation, intern)  – komponerar T2-samverkan
+│   ├── individuell/           inera.fed.individuell    (federation, intern)  – komponerar T2-samverkan
+│   └── po-t2/                 inera.fed.pot2           (federation, intern)  – komponerar T2-samverkan
 ├── stodtjanster/
-│   └── katalog/               inera.st.katalog         (stödtjänst, intern)
+│   └── t2/                    inera.st.t2              (stödtjänst, intern)  – kataloger, intyg, operatör
 ├── tjanster/
 │   ├── npo/                   inera.tjanst.npo         (tjänst, publik)   – SVOD × Patientöversikt
-│   └── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
-├── system/                    konkreta system: roller de antar, ändpunkter och nuläge
-│   └── nulage/                CapabilityStatement (kind=instance) och export från tjänstekatalogen
+│   ├── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
+│   └── po-t2/                 inera.tjanst.pot2        (tjänst, publik)   – Patientöversiktsfederationen × Patientöversikt (T2)
+├── system/                    konkreta system: roller, tillval, informationsmängder, ändpunkter och nuläge
+│   └── nulage/                CapabilityStatement (kind=instance) och T2-katalogerna
+├── miljoer/                   verkliga T2-realiseringar för läsadaptern (infopeak.yaml)
+├── externa/                   ögonblicksbilder av externa specifikationer (CC0)
 └── verktyg/                   ig-composer (Node ≥ 20)
 ```
 
-Varje katalog utom `verktyg/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon (skapade från `IneraFHIRTemplate`) som komponeras hit via arbetsytan.
+Varje katalog under `konventioner/`, `byggblock/`, `federationer/`, `stodtjanster/` och `tjanster/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon (skapade från `IneraFHIRTemplate`) som komponeras hit via arbetsytan.
 
 Historiken är flyttad från `komposition/` på branchen `claude/trusting-ritchie-k22m87` i `Inera-AB/IneraFHIRTemplate`.
 
@@ -323,8 +366,10 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 
 - Dela upp i egna repon och lägg `ig-composer` som steg i `fhir-ig-workflows`.
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
-- Registrera genererade `<Aktör>CS` som `TKAPISpecificationCapability` i tjänstekatalogen.
-- Köra federationstestet mot riktiga ändpunkter (testmiljöer) i stället för mocken: samma körare, andra adresser.
+- Registrera tjänsternas genererade specifikationer per informationsmängd (`kind=requirements`) i tjänstekatalogen.
+- Läsadaptern mot fler miljöer (testmiljöer i WSO2 APIM), och ett skrivläge för testmiljöer där förutsättningarna får registreras.
+- Riktiga åtkomstintyg: utfärdaren som anslutningspunkten anvisar, i stället för gatewayns token.
+- Härleda konsumentroller ur katalogen (registrerade klienter) så att även konsumentsidan kan provas mot en realisering.
 - Validera svaren mot profilerna (FHIR-valideraren) i federationstestet.
 - Testskript: generera `TestScript` per system ur testlistan.
 - Avlämningsyta: `ig-composer leverera` med låsfil, kanaler (utkast, kandidat, fastställd) och ändringsrapport per systemroll, så att ändringar inte slår igenom i tjänsterna direkt.

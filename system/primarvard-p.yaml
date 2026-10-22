@@ -1,0 +1,17 @@
+system: PrimarvardP
+titel: Primärvårdssystem P
+organisation:
+  namn: Region Exempel
+  hsaId: SE2321000099-EXMP
+andpunkter:
+  - https://fhir.primarvard-p.region-exempel.se/fhir
+roller:
+  - tjanst: inera.tjanst.pot2
+    aktor: POT2Producent
+  - tjanst: inera.tjanst.pot2
+    aktor: POT2Visning
+tillval:
+  - POT2Engagemangsindexerad
+nulage:
+  formaga: nulage/primarvard-p-metadata.json
+  katalog: nulage/t2-katalog.json

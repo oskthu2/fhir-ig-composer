@@ -14,7 +14,13 @@
 //   ig-composer federation testa            bygg en mockad federation, kör förutsättningar och
 //                                           användningsfall mot den; skriver federation.json och
 //                                           rapport/federation.md
+//   ig-composer federation testa --mot <miljö>
+//                                           kör i läsläge mot en verklig T2-realisering
+//                                           (miljoer/<miljö>.yaml); skriver federation-<miljö>.json
+//                                           och rapport/federation-<miljö>.md
 //   ig-composer federation starta [--port N] starta den mockade federationen och låt den köra
+//   ig-composer externa hamta [--mot <miljö>] hämta de externa specifikationerna (basic auth
+//                                           från INFOPEAK_ANVANDARE/INFOPEAK_LOSENORD)
 //
 // IG Publisher körs därefter med -no-sushi, så att efterbehandlingen står kvar.
 //
@@ -31,7 +37,8 @@ import {
 } from './fsh.mjs';
 import { composeScenarios } from './scenario.mjs';
 import { loadSystems, analyseSystem, renderReport } from './system.mjs';
-import { byggFederation, testaFederation, renderFederationReport } from './federation.mjs';
+import { byggFederation, testaFederation, korFederation, renderFederationReport } from './federation.mjs';
+import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
 const OUT_FSH = path.join('input', 'fsh', '_komponerat');
@@ -887,6 +894,9 @@ export function viewData(ws, root) {
     manifest,
     system: analyseSystems(ws, root, manifest),
     federation: fs.existsSync(path.join(root, 'federation.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'federation.json'), 'utf8')) : null,
+    // Körningar mot verkliga T2-realiseringar (federation testa --mot <miljö>).
+    miljoer: fs.readdirSync(root).filter((f) => /^federation-.+\.json$/.test(f)).sort()
+      .map((f) => JSON.parse(fs.readFileSync(path.join(root, f), 'utf8'))),
   };
 }
 
@@ -1022,6 +1032,17 @@ function buildOrder(ws) {
   return order;
 }
 
+function skrivKorningar(r) {
+  const per = {};
+  const tecken = { ok: '✓', fel: '✕', delvis: '~', okänt: '?', manuell: '·' };
+  for (const k of r.korningar) (per[k.system] ||= []).push(`${tecken[k.status] || '~'} ${k.titel} (${k.roll.split('#')[1]})`);
+  for (const [sys, lista] of Object.entries(per)) console.log(`${sys}:\n  ${lista.join('\n  ')}`);
+  for (const f of r.fore) {
+    const e = r.efter.find((x) => x.system === f.system);
+    console.log(`${f.system}: anslutningar före ${f.sammanfattning.anslutningarOk}/${f.anslutningar.length}, efter ${e.sammanfattning.anslutningarOk}/${e.anslutningar.length}`);
+  }
+}
+
 function main(argv) {
   const args = argv.slice(2);
   const flag = args.indexOf('--arbetsyta');
@@ -1070,6 +1091,36 @@ function main(argv) {
     console.log(`Rapporter i ${dir}`);
     return status;
   }
+  const motFlagga = args.indexOf('--mot');
+  const mot = motFlagga >= 0 ? args[motFlagga + 1] : null;
+  if (cmd === 'externa' && target === 'hamta') {
+    return hamtaExterna(root, lasMiljo(root, mot || 'infopeak')).then((filer) => {
+      for (const f of filer) console.log(`  ${f}`);
+      console.log(`Hämtade ${filer.length} externa specifikationer`);
+      return 0;
+    });
+  }
+  if (cmd === 'federation' && target === 'testa' && mot) {
+    const konf = lasMiljo(root, mot);
+    const miljo = adapterMiljo(konf);
+    const manifests = loadManifests(ws);
+    const regler = loadRules(ws).system || {};
+    const tjanster = konf.tjanster || Object.values(manifests).filter((m) => m.ig.roll === 'tjanst').map((m) => m.ig.id);
+    return systemFranKatalog(miljo, manifests, tjanster, regler).then(async (systems) => {
+      console.log(`${miljo.titel}: ${systems.length} system härledda ur katalogen`);
+      const r = await korFederation({ miljo, manifests, systems, root, regler });
+      r.specifikationer = jamforSpecifikationer(root, konf, manifests, tjanster, ws.get(tjanster[0])?.fhirVersion);
+      fs.writeFileSync(path.join(root, `federation-${mot}.json`), JSON.stringify(r, null, 2) + '\n');
+      fs.mkdirSync(path.join(root, 'rapport'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'rapport', `federation-${mot}.md`), renderFederationReport(r));
+      skrivKorningar(r);
+      for (const j of r.specifikationer) {
+        console.log(`${j.titel}: ${j.avvikelser.map((a) => a.niva).filter((n) => n !== 'info').length} avvikelser mot ${j.extern}`);
+      }
+      console.log(`Skrev federation-${mot}.json och rapport/federation-${mot}.md`);
+      return 0;
+    });
+  }
   if (cmd === 'federation') {
     const portFlagga = args.indexOf('--port');
     const port = portFlagga >= 0 ? Number(args[portFlagga + 1]) : 0;
@@ -1085,14 +1136,7 @@ function main(argv) {
       fs.writeFileSync(path.join(root, 'federation.json'), JSON.stringify(r, null, 2) + '\n');
       fs.mkdirSync(path.join(root, 'rapport'), { recursive: true });
       fs.writeFileSync(path.join(root, 'rapport', 'federation.md'), renderFederationReport(r));
-      const per = {};
-      const tecken = { ok: '✓', fel: '✕', delvis: '~', okänt: '?', manuell: '·' };
-      for (const k of r.korningar) (per[k.system] ||= []).push(`${tecken[k.status] || '~'} ${k.titel} (${k.roll.split('#')[1]})`);
-      for (const [sys, lista] of Object.entries(per)) console.log(`${sys}:\n  ${lista.join('\n  ')}`);
-      for (const f of r.fore) {
-        const e = r.efter.find((x) => x.system === f.system);
-        console.log(`${f.system}: anslutningar före ${f.sammanfattning.anslutningarOk}/${f.anslutningar.length}, efter ${e.sammanfattning.anslutningarOk}/${e.anslutningar.length}`);
-      }
+      skrivKorningar(r);
       console.log('Skrev federation.json och rapport/federation.md');
       return 0;
     });
