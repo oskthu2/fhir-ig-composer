@@ -1,4 +1,8 @@
-# Komposition av IG:ar – prototyp
+# fhir-ig-composer
+
+[![Bygg och testa](https://github.com/oskthu2/fhir-ig-composer/actions/workflows/bygg.yml/badge.svg)](https://github.com/oskthu2/fhir-ig-composer/actions/workflows/bygg.yml)
+
+Komposition av FHIR-IG:ar – prototyp.
 
 Prototyp för att komponera Ineras IG:ar av återanvändbara delar: **byggblock** (kliniskt innehåll), **federationer** (juridiskt utrymme, säkerhetsmetadata och stödtjänster) och **tjänster** (en cell i matrisen federation × domän). Kraven på ett system härleds från de **systemroller** (R5 `ActorDefinition`) som det antar.
 
@@ -14,7 +18,7 @@ Tjänster i prototypen:
 (`node verktyg/ig-compose.mjs matris` tar fram matrisen ur IG:arna.)
 
 ```
-komposition/
+.
 ├── konventioner/              inera.build.conventions  (konvention, publik)
 │   └── regler.yaml            globala kompositionsregler
 ├── byggblock/
@@ -30,13 +34,17 @@ komposition/
 └── verktyg/                   ig-compose (Node ≥ 20)
 ```
 
-Katalogerna är egna IG:ar och är tänkta att bli egna repon (byggblock och federationer från `IneraFHIRTemplate`, verktyget i mallen eller i `fhir-ig-workflows`). De ligger i samma katalog här för att prototypen ska gå att bygga från början till slut.
+Varje katalog utom `verktyg/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon (skapade från `IneraFHIRTemplate`) som komponeras hit via arbetsytan.
+
+Historiken är flyttad från `komposition/` på branchen `claude/trusting-ritchie-k22m87` i `Inera-AB/IneraFHIRTemplate`.
 
 ## Bygga
 
+CI (`.github/workflows/bygg.yml`) kör samma sak vid varje push och pull request: verktygets tester, `bygg` för alla IG:ar och `matris`.
+
 ```sh
 npm install -g fsh-sushi
-cd komposition/verktyg && npm ci && cd ..
+cd verktyg && npm ci && cd ..
 node verktyg/ig-compose.mjs bygg          # alla IG:ar i beroendeordning
 node verktyg/ig-compose.mjs matris        # matris.md: federation × domän
 cd verktyg && npm test                    # verktygets tester

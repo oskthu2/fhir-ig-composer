@@ -4,8 +4,21 @@
   "private": true,
   "description": "Komponerar Ineras FHIR-IG:ar av byggblock, federationer och konventioner.",
   "type": "module",
-  "bin": { "ig-compose": "ig-compose.mjs" },
-  "scripts": { "test": "node --test" },
-  "dependencies": { "yaml": "^2.5.0" },
-  "engines": { "node": ">=20" }
+  "bin": {
+    "ig-compose": "ig-compose.mjs"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oskthu2/fhir-ig-composer.git",
+    "directory": "verktyg"
+  }
 }

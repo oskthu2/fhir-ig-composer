@@ -1,0 +1,37 @@
+name: Bygg och testa
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bygg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: verktyg/package-lock.json
+
+      - name: Installera SUSHI och verktyget
+        run: |
+          npm install -g fsh-sushi@3
+          npm ci --prefix verktyg
+
+      - name: Testa verktyget
+        run: npm test --prefix verktyg
+
+      - name: Komponera och bygg alla IG:ar
+        run: node verktyg/ig-compose.mjs bygg
+
+      - name: Matris federation × domän
+        run: |
+          node verktyg/ig-compose.mjs matris
+          cat matris.md >> "$GITHUB_STEP_SUMMARY"
