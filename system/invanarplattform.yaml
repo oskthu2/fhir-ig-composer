@@ -1,0 +1,9 @@
+system: Invanarplattform
+titel: 1177 invånarplattform
+organisation: Inera
+roller:
+  - tjanst: inera.tjanst.journal1177
+    aktor: Journal1177Invanartjanst
+nulage:
+  formaga: nulage/invanarplattform-metadata.json
+  anslutningar: nulage/tjanstekatalog-export.json

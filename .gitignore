@@ -21,3 +21,6 @@ matris.json
 
 # Matrisvyn genereras av ig-composer vy
 vy.html
+
+# Systemrapporter genereras av ig-composer system
+rapport/

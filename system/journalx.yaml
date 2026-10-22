@@ -1,0 +1,19 @@
+# Ett konkret system och de roller det antar i olika tjänster. ig-composer
+# summerar kraven över rollerna och jämför med nuläget.
+system: JournalX
+titel: Journalsystem X
+organisation: Region Exempel
+andpunkter:
+  - https://fhir.journalx.region-exempel.se/r5
+roller:
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKallsystem
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKonsument
+  - tjanst: inera.tjanst.journal1177
+    aktor: Journal1177KallsystemMarkande
+nulage:
+  # CapabilityStatement (kind=instance), som från GET [bas]/metadata
+  formaga: nulage/journalx-metadata.json
+  # Export från tjänstekatalogen: API-instanser (TKAPIInstance)
+  anslutningar: nulage/tjanstekatalog-export.json

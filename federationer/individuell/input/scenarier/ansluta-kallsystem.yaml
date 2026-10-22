@@ -1,0 +1,24 @@
+# Förutsättning (extension forutsattning): ingår i varje tjänst i Individuell tillgång.
+anvandningsfall: AnslutaKallsystemIndividuell
+nyckel: IND-AK
+titel: Ansluta källsystem för individuell tillgång
+syfte: >-
+  Ett källsystem ska gå att hitta för invånartjänsten: det registreras i
+  tjänstekatalogen, och invånartjänsten avgör med capability discovery vad
+  källsystemet stödjer.
+
+aktorer:
+  kalla: IndividuellKallsystem
+  katalog: Tjanstekatalog
+  invanartjanst: IndividuellKonsument
+
+steg:
+  - inkludera: RegistreraAndpunkt
+    roller:
+      registrerare: kalla
+      katalog: katalog
+  - titel: Invånartjänsten hämtar källsystemets CapabilityStatement
+    fran: invanartjanst
+    till: kalla
+    operation: capabilities
+    krav: Källsystemet SKA exponera ett CapabilityStatement (kind=instance) som anger vilka tjänster och profiler det stödjer.

@@ -81,3 +81,13 @@ Description: "Verksamhetskrav på producent av labbsvar."
 * statement[=].label = "Referensintervall"
 * statement[=].conformance[0] = #SHOULD
 * statement[=].requirement = "Producenten BÖR lämna referensintervall för numeriska svar."
+
+Instance: LabLasare
+InstanceOf: ActorDefinition
+Usage: #definition
+Title: "Läsare av labbsvar"
+Description: "Person som tar del av labbsvar, t.ex. patienten själv eller vårdpersonal."
+* name = "LabLasare"
+* title = "Läsare av labbsvar"
+* status = #draft
+* type = #person

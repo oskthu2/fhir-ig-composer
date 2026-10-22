@@ -9,6 +9,7 @@ Description: "System som gör vårddokumentation tillgänglig för invånarens d
 * title = "Individuell tillgång: källsystem"
 * status = #draft
 * type = #system
+* derivedFrom[0] = Canonical(TjanstekatalogRegistrerare)
 * capabilities = Canonical(IndividuellKallsystemCS)
 
 Instance: IndividuellKallsystemMarkande

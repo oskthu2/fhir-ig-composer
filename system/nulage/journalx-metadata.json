@@ -1,0 +1,172 @@
+{
+  "resourceType": "CapabilityStatement",
+  "id": "journalx",
+  "status": "active",
+  "date": "2026-10-01",
+  "kind": "instance",
+  "software": {
+    "name": "Journalsystem X",
+    "version": "24.3"
+  },
+  "implementation": {
+    "description": "Journalsystem X, Region Exempel",
+    "url": "https://fhir.journalx.region-exempel.se/r5"
+  },
+  "instantiates": [
+    "https://fhir.inera.se/ig/npo/CapabilityStatement/NPOKallsystemCS|0.1.0"
+  ],
+  "fhirVersion": "5.0.0",
+  "format": [
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "type": "Encounter",
+          "interaction": [
+            {
+              "code": "search-type"
+            },
+            {
+              "code": "read"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "token"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/npo/StructureDefinition/vardkontakt-npo"
+          ]
+        },
+        {
+          "type": "Observation",
+          "interaction": [
+            {
+              "code": "search-type"
+            },
+            {
+              "code": "read"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "token"
+            },
+            {
+              "name": "category",
+              "type": "token"
+            },
+            {
+              "name": "date",
+              "type": "token"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/journal1177/StructureDefinition/labbsvar"
+          ]
+        },
+        {
+          "type": "Provenance",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "target",
+              "type": "token"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "client",
+      "interaction": [
+        {
+          "code": "search-system"
+        }
+      ],
+      "resource": [
+        {
+          "type": "Encounter",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/npo/StructureDefinition/vardkontakt-npo"
+          ]
+        },
+        {
+          "type": "CareTeam",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ]
+        },
+        {
+          "type": "AuditEvent",
+          "interaction": [
+            {
+              "code": "create"
+            }
+          ]
+        },
+        {
+          "type": "Endpoint",
+          "interaction": [
+            {
+              "code": "create"
+            },
+            {
+              "code": "update"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/tjanstekatalog/StructureDefinition/tk-endpoint"
+          ]
+        },
+        {
+          "type": "CapabilityStatement",
+          "interaction": [
+            {
+              "code": "create"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/tjanstekatalog/StructureDefinition/tk-api-instance"
+          ]
+        },
+        {
+          "type": "List",
+          "interaction": [
+            {
+              "code": "create"
+            },
+            {
+              "code": "update"
+            }
+          ]
+        },
+        {
+          "type": "Provenance",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -43,7 +43,8 @@ federation:
 lager:
   # Vilka roller en IG med given roll får komponera.
   byggblock:  [byggblock, konvention]
-  federation: [federation, konvention]
+  federation: [federation, stodtjanst, konvention]
+  stodtjanst: [stodtjanst, konvention]
   tjanst:     [byggblock, federation, konvention]
   konvention: []
   # En tjänst ligger i exakt en federation (en cell i matrisen).
@@ -64,6 +65,9 @@ scenarier:
   katalog: input/scenarier
   # Federationens flödesmönster vävs in i tjänstens användningsfall.
   vavning: true
+  # Federationens förutsättningar (extension forutsattning) ingår i varje
+  # tjänst i federationen.
+  forutsattningar: true
   # ExampleScenario per användningsfall och delflöde, och Requirements per
   # användningsfall och deltagande aktör (en sats per steg).
   genereraKrav: true
@@ -74,3 +78,8 @@ scenarier:
     informationsbehovUtanProfil: fel    # ingen profil realiserar informationsbehovet
     rollUtanTjanstaktor: varning        # ingen tjänsteaktör spelar alla roller i en scenarioaktör
     formagaSaknas: varning              # avsändare/mottagare saknar interaktionen i sina förmågor
+
+system:
+  # System (system/*.yaml) som antar en roll som härleds från denna roll
+  # förväntas ha en API-instans registrerad i tjänstekatalogen per sådan roll.
+  registreringsroll: TjanstekatalogRegistrerare

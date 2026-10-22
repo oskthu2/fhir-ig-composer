@@ -1,0 +1,47 @@
+id: inera.st.katalog
+canonical: https://fhir.inera.se/ig/katalog
+name: IneraStodtjanstKatalog
+title: "Stödtjänst: Tjänstekatalogen"
+description: "Tjänstekatalogens roll i kompositionen: aktörerna Tjänstekatalog och Registrerare, deras förmågor och användningsfallet att registrera en ändpunkt med dess API-instanser. Själva API:et specificeras i IG:n Tjänstekatalogen (https://fhir.inera.se/ig/tjanstekatalog)."
+status: draft
+version: 0.1.0
+fhirVersion: 5.0.0
+copyrightYear: 2026+
+releaseLabel: ci-build
+license: CC0-1.0
+
+publisher:
+  name: Inera AB
+  url: https://www.inera.se
+
+jurisdiction: urn:iso:std:iso:3166#SE "Sweden"
+
+dependencies:
+  inera.build.conventions: 0.1.0
+
+extension:
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/ig-roll
+    valueCode: stodtjanst
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/publicering
+    valueCode: intern
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
+    extension:
+      - url: paket
+        valueString: inera.build.conventions
+      - url: version
+        valueString: 0.1.0
+
+parameters:
+  usage-stats-opt-out: true
+  i18n-default-lang: sv
+
+pages:
+  index.md:
+    title: Hem
+  komposition.md:
+    title: Komposition
+
+menu:
+  Hem: index.html
+  Komposition: komposition.html
+  Artefakter: artifacts.html

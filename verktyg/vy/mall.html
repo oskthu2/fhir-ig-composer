@@ -23,6 +23,8 @@
   --tjanst-bg: #f6e6ee;
   --konvention: #5f6670;
   --konvention-bg: #eceef1;
+  --stodtjanst: #2b7a78;
+  --stodtjanst-bg: #e2f1f0;
   --lokal: #2e7d4f;
   --kopierad: #2f6db5;
   --genererad: #7a4fb5;
@@ -50,6 +52,8 @@
     --tjanst-bg: #3a2230;
     --konvention: #a9b0ba;
     --konvention-bg: #2b2e33;
+    --stodtjanst: #6cc7c3;
+    --stodtjanst-bg: #1c3332;
     --lokal: #6cc38f;
     --kopierad: #7fb0ec;
     --genererad: #b597e6;
@@ -65,6 +69,7 @@
   --bg: #171615; --yta: #201f1d; --yta2: #2a2826; --text: #ecebe8; --svag: #a39e97; --kant: #3a3734;
   --fokus: #e07aa8; --byggblock: #7fb0ec; --byggblock-bg: #1f2c3c; --federation: #d9b77a; --federation-bg: #352c1d;
   --tjanst: #e07aa8; --tjanst-bg: #3a2230; --konvention: #a9b0ba; --konvention-bg: #2b2e33;
+  --stodtjanst: #6cc7c3; --stodtjanst-bg: #1c3332;
   --lokal: #6cc38f; --kopierad: #7fb0ec; --genererad: #b597e6; --ruleset: #a9b0ba; --refererad: #d9b77a;
   --utelamnat: #e88480; --shall: #ecebe8; --should: #a39e97; --skugga: none;
 }
@@ -132,6 +137,23 @@ table.matris .hörn { background: transparent; color: var(--svag); font-weight: 
 .r-federation { --rf: var(--federation); --rb: var(--federation-bg); }
 .r-tjanst { --rf: var(--tjanst); --rb: var(--tjanst-bg); }
 .r-konvention { --rf: var(--konvention); --rb: var(--konvention-bg); }
+.r-stodtjanst { --rf: var(--stodtjanst); --rb: var(--stodtjanst-bg); }
+
+/* Systemperspektiv */
+.status { font-size: 0.75rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; background: var(--yta2); color: var(--svag); }
+.status.ok, .status.registrerad { background: color-mix(in srgb, var(--lokal) 18%, transparent); color: var(--lokal); }
+.status.delvis, .status.annan-version { background: color-mix(in srgb, var(--federation) 22%, transparent); color: var(--federation); }
+.status.saknas { background: color-mix(in srgb, var(--utelamnat) 18%, transparent); color: var(--utelamnat); }
+.del { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; padding: 0 6px; border-radius: 5px; margin: 1px 4px 1px 0; background: var(--yta2); }
+.del.ja { color: var(--lokal); } .del.nej { color: var(--utelamnat); text-decoration: line-through; text-decoration-thickness: 1.5px; } .del.okänt { color: var(--svag); }
+.siffror { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 4px; }
+.siffra { background: var(--yta2); border-radius: 10px; padding: 8px 14px; min-width: 120px; }
+.siffra b { display: block; font-size: 1.35rem; line-height: 1.2; }
+.siffra span { font-size: 0.78rem; color: var(--svag); }
+.systemlista { padding: 14px 16px; margin-bottom: 18px; }
+.systemlista h3 { margin: 0 0 8px; }
+.inkl { background: color-mix(in srgb, var(--stodtjanst-bg) 70%, transparent); }
+.sekvens .rubrikrad.inkl { color: var(--stodtjanst); }
 .prick { background: var(--rf, var(--svag)); }
 .igchip { background: var(--rb); color: var(--text); border-color: transparent; }
 
@@ -239,6 +261,8 @@ ul.träd li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 
   <section class="kort alla" id="alla" aria-label="IG:ar i arbetsytan"></section>
 
+  <section class="kort systemlista" id="system" aria-label="System" hidden></section>
+
   <section class="kort panel" id="panel" aria-live="polite"></section>
 
   <p class="fot" id="fot"></p>
@@ -259,7 +283,8 @@ const el = (tag, attrs = {}, ...barn) => {
   for (const b of barn.flat()) if (b !== null && b !== undefined && b !== false) e.append(b.nodeType ? b : String(b));
   return e;
 };
-const ROLL = { byggblock: 'Byggblock', federation: 'Federation', tjanst: 'Tjänst', konvention: 'Konvention' };
+const ROLL = { byggblock: 'Byggblock', federation: 'Federation', stodtjanst: 'Stödtjänst', tjanst: 'Tjänst', konvention: 'Konvention' };
+const SYSTEM = DATA?.system || [];
 const LÄGE = {
   lokal: 'lokal', kopierad: 'kopierad', genererad: 'genererad', ruleset: 'RuleSet', alias: 'alias',
   refererad: 'refererad', utelämnat: 'utelämnat',
@@ -325,6 +350,7 @@ function markerade() {
   if (!state.id) return null;
   if (state.vy === 'tjanst') return new Set([state.id]);
   if (state.vy === 'paket') return new Set([state.id, ...(användsI.get(state.id) || []).map((u) => u.ig)]);
+  if (state.vy === 'system') return new Set((SYSTEM.find((x) => x.system === state.id)?.roller || []).map((r) => r.tjanst));
   if (state.vy === 'artefakt') return new Set((artefakter.get(state.id)?.finns || []).filter((f) => f.lage !== 'utelämnat').map((f) => f.ig));
   return null;
 }
@@ -361,11 +387,11 @@ function ritaAlla() {
   const s = document.getElementById('alla');
   s.replaceChildren();
   s.classList.toggle('dimma', !!träff);
-  for (const roll of ['tjanst', 'byggblock', 'federation', 'konvention']) {
+  for (const roll of ['tjanst', 'byggblock', 'federation', 'stodtjanst', 'konvention']) {
     const lista = [...igs.values()].filter((i) => i.roll === roll);
     if (!lista.length) continue;
     s.append(el('div', {},
-      el('h3', {}, { tjanst: 'Tjänster', byggblock: 'Byggblock', federation: 'Federationer', konvention: 'Konventioner' }[roll]),
+      el('h3', {}, { tjanst: 'Tjänster', byggblock: 'Byggblock', federation: 'Federationer', stodtjanst: 'Stödtjänster', konvention: 'Konventioner' }[roll]),
       lista.map((i) => el('button', {
         class: `chip igchip ${rollKlass(i.id)}${träff?.has(i.id) ? ' träff' : ''}`,
         'aria-pressed': state.id === i.id ? 'true' : 'false',
@@ -379,7 +405,7 @@ function ritaAlla() {
 function ritaFörklaring() {
   const f = document.getElementById('förklaring');
   f.replaceChildren(
-    ...['byggblock', 'federation', 'tjanst', 'konvention'].map((r) => el('span', {}, el('span', { class: `prick r-${r}` }), ROLL[r])),
+    ...['byggblock', 'federation', 'stodtjanst', 'tjanst', 'konvention'].map((r) => el('span', {}, el('span', { class: `prick r-${r}` }), ROLL[r])),
     el('span', {}, '·'),
     ...['lokal', 'kopierad', 'genererad', 'refererad', 'utelämnat'].map((l) => el('span', { class: `läge l-${l}` }, LÄGE[l])),
   );
@@ -392,6 +418,7 @@ function ritaPanel() {
   if (state.vy === 'tjanst' || (state.vy === 'paket' && M[state.id] && ig(state.id).roll === 'tjanst')) return ritaIg(p, state.id);
   if (state.vy === 'paket') return ritaPaket(p, state.id);
   if (state.vy === 'artefakt') return ritaArtefakt(p, state.id);
+  if (state.vy === 'system') return ritaSystem(p, state.id);
   p.append(
     el('h2', {}, 'Välj en tjänst, ett paket eller en artefakt'),
     el('p', { class: 'svag' }, 'Klicka på en tjänst i matrisen för dess kravprofiler per systemroll och vad som kommer med varifrån. Klicka på en domän eller federation för att se var den används. Sök efter en artefakt för att se i vilka IG:ar den finns.'),
@@ -531,7 +558,7 @@ function ritaAnvandningsfall(c, m) {
     ucs.map((x) => el('button', {
       class: `chip igchip ${x.typ === 'delflode' ? rollKlass(x.paket) : 'r-tjanst'}`, 'aria-pressed': x === u ? 'true' : 'false',
       onclick: () => { state.aktor = x.namn; skrivHash(); ritaPanel(); },
-    }, x.typ === 'delflode' ? `Delflöde: ${x.titel}` : x.titel))));
+    }, x.typ === 'delflode' ? `Delflöde: ${x.titel}` : x.endastInkluderad ? `Inkluderat: ${x.titel}` : x.forutsattning ? `Förutsättning: ${x.titel}` : x.titel))));
   c.append(
     el('p', {}, u.syfte || ''),
     el('p', { class: 'svag liten' }, `${u.typ === 'delflode' ? 'Delflöde' : 'Användningsfall'} `, artLänk(m.ig.id, u.namn), ` · skiss: `, el('code', {}, `${u.fil}`), ` i `, kort(u.paket)),
@@ -549,7 +576,11 @@ function ritaAnvandningsfall(c, m) {
   let radNr = 1; // rad 1 är aktörerna
   const fullbredd = (cls, ...barn) => el('div', { class: cls, style: `grid-column: 1 / ${banor.length + 2}; grid-row: ${++radNr}` }, ...barn);
   const rad = (st, extra = '') => {
-    const invävd = st.invavd ? ' invävd' : '';
+    const invävd = st.invavd ? ' invävd' : st.inkluderad ? ' inkl' : '';
+    if (st.typ === 'inkludering') {
+      grid.append(fullbredd('rubrikrad inkl', `${st.nr} ↳ inkluderar: `, el('button', { class: 'länk', onclick: () => { state.aktor = st.inkluderad; skrivHash(); ritaPanel(); } }, st.titel)));
+      return;
+    }
     if (st.typ === 'delflode') {
       grid.append(fullbredd(`rubrikrad invävd`, `${st.nr} ↳ invävt från ${kort(st.invavd)}: `, el('button', { class: 'länk', onclick: () => { state.aktor = st.delflode; skrivHash(); ritaPanel(); } }, st.titel)));
       return;
@@ -626,6 +657,208 @@ function ritaAnvandningsfall(c, m) {
     ig(m.ig.id).roll === 'tjanst' ? el('li', {}, ospelade.length ? el('span', { class: 'nej' }, '✕ ') : el('span', { class: 'ok' }, '✓ '),
       ospelade.length ? `Ingen tjänsteaktör spelar ${ospelade.map((b) => b.titel).join(', ')}` : 'Alla systemaktörer spelas av en tjänsteaktör eller är stödtjänster') : null,
   ));
+}
+
+// ------------------------------------------------------------------ system
+const STATUS = { ok: 'ok', delvis: 'delvis', saknas: 'saknas', 'okänt': 'okänt nuläge', manuell: 'manuell', registrerad: 'registrerad', 'annan version': 'annan version' };
+const statusEl = (s) => el('span', { class: `status ${String(s).replace(' ', '-')}` }, STATUS[s] || s);
+const rollEtikett = (a, id) => a.roller.find((x) => x.id === id)?.titel || id;
+
+// Status för ett API-krav, räknat bara på valda roller (samma regel som i system.mjs).
+function apiStatus(item, aktiva) {
+  const aktiv = (x) => x.roller.some((r) => aktiva.has(r));
+  const delar = [...item.interaktioner, ...item.sokparametrar, ...item.profiler].filter(aktiv);
+  if (!delar.length && !item.roller.some((r) => aktiva.has(r))) return null;
+  if (delar.some((d) => d.finns === null) || item.typFinns === null) return 'okänt';
+  if (!item.typFinns) return 'saknas';
+  return delar.every((d) => d.finns) ? 'ok' : 'delvis';
+}
+
+function ritaSystemlista() {
+  const s = document.getElementById('system');
+  s.hidden = !SYSTEM.length;
+  s.replaceChildren(el('h3', {}, 'System'), el('div', {}, SYSTEM.map((a) => el('button', {
+    class: 'chip igchip r-konvention', 'aria-pressed': state.vy === 'system' && state.id === a.system ? 'true' : 'false',
+    onclick: () => välj('system', a.system), title: a.roller.map((r) => r.id).join(', '),
+  }, a.titel, el('span', { class: 'svag liten' }, `${a.roller.length} roller`),
+  a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap ? el('span', { class: 'status saknas' }, `${a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap} gap`) : null))),
+  el('p', { class: 'svag liten', style: 'margin:8px 0 0' }, 'Ett system antar roller i en eller flera tjänster. Välj ett system för summan av kraven på dess API, gapet mot nuläget och vad som ska testas.'));
+}
+
+function ritaSystem(p, namn) {
+  const a = SYSTEM.find((x) => x.system === namn);
+  if (!a) return p.append(el('p', { class: 'tom' }, `Hittar inte systemet ${namn}.`));
+  const valda = state.filter.roller ||= new Set(a.roller.map((r) => r.id));
+  const vald = (lista) => lista.some((r) => valda.has(r));
+  p.append(
+    el('div', { class: 'panelhuvud' }, el('h2', {}, a.titel), el('span', { class: 'svag' }, a.organisation || '')),
+    el('div', { class: 'etiketter' }, el('span', { class: 'etikett mono' }, a.fil), ...a.andpunkter.map((u) => el('span', { class: 'etikett mono' }, u)),
+      el('span', { class: 'etikett' }, a.nulage.finns ? `nuläge: ${a.nulage.fil}` : 'inget nuläge inlämnat')),
+    el('h3', {}, 'Roller – summera för'),
+    el('div', { class: 'filter', role: 'group', 'aria-label': 'Roller att summera' }, a.roller.map((r) => el('button', {
+      class: 'växel', 'aria-pressed': valda.has(r.id) ? 'true' : 'false', title: r.id,
+      onclick: () => { valda.has(r.id) ? valda.delete(r.id) : valda.add(r.id); ritaMatris(); ritaPanel(); },
+    }, prick(r.tjanst), r.titel))),
+  );
+  if (a.fel.length) p.append(el('ul', {}, a.fel.map((f) => el('li', { class: 'nej' }, f))));
+
+  const api = a.api.filter((x) => vald(x.roller)).map((x) => ({ ...x, st: apiStatus(x, valda) }));
+  const ansl = a.anslutningar.forvantade.filter((f) => valda.has(f.roll));
+  const tester = a.testlista.filter((t) => vald(t.roller));
+  const räkna = (f) => api.filter(f).length;
+  p.append(el('div', { class: 'siffror' },
+    el('div', { class: 'siffra' }, el('b', {}, räkna((x) => x.st === 'ok')), el('span', {}, 'API-krav uppfyllda')),
+    el('div', { class: 'siffra' }, el('b', {}, räkna((x) => x.st === 'delvis' || x.st === 'saknas')), el('span', {}, 'API-krav med gap')),
+    a.nulage.finns ? null : el('div', { class: 'siffra' }, el('b', {}, räkna((x) => x.st === 'okänt')), el('span', {}, 'API-krav, okänt nuläge')),
+    el('div', { class: 'siffra' }, el('b', {}, `${ansl.filter((f) => f.status === 'registrerad').length}/${ansl.length}`), el('span', {}, 'registrerade API-instanser')),
+    el('div', { class: 'siffra' }, el('b', {}, tester.length), el('span', {}, 'tester')),
+  ));
+
+  flikar(p, [
+    { id: 'api', titel: 'API-förmåga', antal: api.length, rita: (c) => ritaSystemApi(c, a, api, valda) },
+    { id: 'elm', titel: 'Elementkrav', antal: a.element.filter((e) => vald(e.roller)).length, rita: (c) => ritaSystemElement(c, a, valda) },
+    { id: 'krv', titel: 'Verksamhetskrav', antal: a.krav.filter((q) => vald(q.roller)).length, rita: (c) => ritaSystemKrav(c, a, valda) },
+    { id: 'scn', titel: 'Användningsfall', antal: a.scenarier.filter((x) => valda.has(x.roll)).length, rita: (c) => ritaSystemScenarier(c, a, valda) },
+    { id: 'ans', titel: 'Anslutningar', antal: ansl.length, rita: (c) => ritaSystemAnslutningar(c, a, valda) },
+    { id: 'test', titel: 'Testlista', antal: tester.length, rita: (c) => ritaTestlista(c, a, tester) },
+  ]);
+}
+
+function delar(lista, valda, namnAv) {
+  return lista.filter((d) => d.roller.some((r) => valda.has(r))).map((d) => el('span', {
+    class: `del ${d.finns === true ? 'ja' : d.finns === false ? 'nej' : 'okänt'}`,
+    title: `${d.finns === true ? 'finns' : d.finns === false ? 'saknas' : 'okänt'} · krävs av ${d.roller.join(', ')}`,
+  }, namnAv(d)));
+}
+
+function ritaSystemApi(c, a, api, valda) {
+  const per = state.filter.apiPer || 'typ';
+  c.append(el('div', { class: 'filter' }, el('span', { class: 'svag liten' }, 'Gruppera per:'),
+    ...[['typ', 'resurstyp'], ['roll', 'roll'], ['status', 'status']].map(([k, t]) => el('button', {
+      class: 'växel', 'aria-pressed': per === k ? 'true' : 'false', onclick: () => { state.filter.apiPer = k; ritaPanel(); },
+    }, t))));
+  const rad = (x, rollFilter) => {
+    const v = rollFilter ? new Set([rollFilter]) : valda;
+    const st = rollFilter ? apiStatus(x, v) : x.st;
+    // Profiler med samma källa visas tillsammans.
+    const profiler = new Map();
+    for (const pr of x.profiler.filter((d) => d.roller.some((r) => v.has(r)))) {
+      if (!profiler.has(pr.kalla)) profiler.set(pr.kalla, []);
+      profiler.get(pr.kalla).push(pr);
+    }
+    return el('tr', {},
+      el('td', {}, x.lage === 'server' ? 'server' : 'klient'),
+      el('td', { class: 'mono' }, x.typ === '*' ? 'systemnivå' : x.typ),
+      el('td', {}, delar(x.interaktioner, v, (d) => d.kod)),
+      el('td', {}, delar(x.sokparametrar, v, (d) => d.namn)),
+      el('td', {}, [...profiler.values()].map((lista) => el('div', {},
+        lista[0].namn.startsWith('http') ? lista[0].namn.split('/').pop() : lista[0].namn, lista.length > 1 ? el('span', { class: 'svag liten' }, ` ${lista.length} URL:er`) : null, ' ',
+        lista.map((pr) => el('span', { class: `del ${pr.finns === true ? 'ja' : pr.finns === false ? 'nej' : 'okänt'}`, title: pr.url }, kort(pr.tjanst)))))),
+      el('td', {}, statusEl(st)),
+      rollFilter ? null : el('td', { class: 'via' }, x.roller.filter((r) => valda.has(r)).map((r) => el('div', {}, rollEtikett(a, r)))),
+    );
+  };
+  const huvud = (medRoll) => el('thead', {}, el('tr', {}, ['Läge', 'Resurstyp', 'Interaktioner', 'Sökparametrar', 'Profiler', 'Status', medRoll ? 'Krävs av' : null].filter(Boolean).map((h) => el('th', {}, h))));
+  if (per === 'roll') {
+    for (const r of a.roller.filter((x) => valda.has(x.id))) {
+      const lista = api.filter((x) => x.roller.includes(r.id));
+      c.append(el('h3', {}, `${r.titel} (${lista.length})`),
+        el('div', { class: 'tabellram' }, el('table', { class: 'data' }, huvud(false), el('tbody', {}, lista.map((x) => rad(x, r.id))))));
+    }
+  } else {
+    const ordning = { saknas: 0, delvis: 1, okänt: 2, ok: 3 };
+    const lista = per === 'status' ? [...api].sort((x, y) => (ordning[x.st] ?? 9) - (ordning[y.st] ?? 9)) : api;
+    c.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' }, huvud(true), el('tbody', {}, lista.map((x) => rad(x))))));
+  }
+  c.append(el('p', { class: 'svag liten' }, 'Grönt finns i systemets CapabilityStatement, rött saknas. Summan räknas över de valda rollerna; varje del visar vilka roller som kräver den. Profiler med samma källa (kopierad-fran) är samma profil med en kanonisk URL per tjänst.'));
+}
+
+function ritaSystemElement(c, a, valda) {
+  const lista = a.element.filter((e) => e.roller.some((r) => valda.has(r)));
+  const grupper = new Map();
+  for (const e of lista) { const k = e.profiler[0]?.namn || e.kalla; if (!grupper.has(k)) grupper.set(k, []); grupper.get(k).push(e); }
+  c.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, ['Element', 'Krav', 'Från aktör', 'Krävs av'].map((h) => el('th', {}, h)))),
+    el('tbody', {}, [...grupper].flatMap(([profil, es]) => [
+      el('tr', { class: 'grupp' }, el('td', { colspan: 4 }, profil, es[0].profiler.length > 1 ? el('span', { class: 'svag liten' }, ` (${es[0].profiler.map((x) => kort(x.tjanst)).join(', ')})`) : null)),
+      ...es.map((e) => el('tr', {},
+        el('td', { class: 'mono' }, e.element),
+        el('td', {}, el('span', { class: `kod ${e.kod.split(':')[0]}` }, e.kod)),
+        el('td', { class: 'via' }, e.aktorer.join(', ')),
+        el('td', { class: 'via' }, e.roller.filter((r) => valda.has(r)).map((r) => el('div', {}, rollEtikett(a, r)))),
+      )),
+    ])),
+  )));
+}
+
+function ritaSystemKrav(c, a, valda) {
+  const lista = a.krav.filter((q) => q.roller.some((r) => valda.has(r)));
+  c.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, ['Nyckel', 'Krav', 'Källa', 'Krävs av'].map((h) => el('th', {}, h)))),
+    el('tbody', {}, lista.map((q) => el('tr', {},
+      el('td', { class: 'mono', style: 'white-space:nowrap' }, q.nyckel),
+      el('td', {}, el('span', { class: `kod ${q.styrka}` }, q.styrka), ' ', q.krav),
+      el('td', { class: 'via' }, q.kalla),
+      el('td', { class: 'via' }, q.roller.filter((r) => valda.has(r)).map((r) => el('div', {}, rollEtikett(a, r)))),
+    ))),
+  )));
+}
+
+function ritaSystemScenarier(c, a, valda) {
+  for (const x of a.scenarier.filter((s) => valda.has(s.roll))) {
+    c.append(
+      el('h3', {}, `${x.forutsattning ? 'Förutsättning: ' : ''}${x.titel}`),
+      el('p', { class: 'svag liten' }, rollEtikett(a, x.roll), ' · ', el('button', { class: 'länk', onclick: () => välj('tjanst', x.tjanst, { flik: 'uc', aktor: x.anvandningsfall }) }, 'visa scenariot')),
+      el('ul', { class: 'träd' }, x.steg.map((s) => el('li', {},
+        el('span', { class: 'mono svag' }, s.nr), s.titel,
+        el('span', { class: 'etikett' }, s.sida),
+        s.operation ? el('span', { class: 'del' }, [s.operation, s.profil || s.resurstyp].filter(Boolean).join(' · ')) : null))),
+    );
+  }
+}
+
+function ritaSystemAnslutningar(c, a, valda) {
+  const f = a.anslutningar.forvantade.filter((x) => valda.has(x.roll));
+  c.append(
+    el('p', { class: 'svag' }, 'En roll som härleds från tjänstekatalogens registrerare förväntas ha en API-instans i tjänstekatalogen som följer tjänstens API-specifikation (url|version).'),
+    f.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Roll', 'Förväntad specifikation', 'Status', 'Registrerad'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, f.map((x) => el('tr', {},
+        el('td', {}, rollEtikett(a, x.roll)),
+        el('td', { class: 'mono liten' }, x.specifikation),
+        el('td', {}, statusEl(x.status)),
+        el('td', { class: 'mono liten' }, x.registrerad || '–', x.apiInstans ? el('div', { class: 'via' }, x.apiInstans) : null),
+      ))),
+    )) : el('p', { class: 'tom' }, 'Inga valda roller kräver registrering.'),
+    a.anslutningar.ovantade.length ? el('div', {}, el('h3', {}, 'Registrerade utan roll i systemet'),
+      el('ul', {}, a.anslutningar.ovantade.map((o) => el('li', { class: 'mono liten' }, `${o.instantiates} (${o.apiInstans})`)))) : null,
+    el('h3', {}, 'Nuläge'),
+    a.nulage.finns ? el('p', {}, `${a.nulage.software?.name || ''} ${a.nulage.software?.version || ''}`, a.nulage.instantiates.length ? el('div', { class: 'mono liten svag' }, `instantiates: ${a.nulage.instantiates.join(', ')}`) : null)
+      : el('p', { class: 'svag' }, 'Inget CapabilityStatement (kind=instance) inlämnat för systemet.'),
+  );
+}
+
+function ritaTestlista(c, a, tester) {
+  const kategorier = [...new Set(tester.map((t) => t.kategori))];
+  const ladda = () => {
+    const rader = ['| Id | Kategori | Test | Status | Krävs av |', '|---|---|---|---|---|',
+      ...tester.map((t) => `| ${t.id} | ${t.kategori} | ${t.text.replace(/\|/g, '\\|')} | ${t.status} | ${t.roller.map((r) => rollEtikett(a, r)).join(', ')} |`)];
+    const blob = new Blob([`# Testlista: ${a.titel}\n\n${rader.join('\n')}\n`], { type: 'text/markdown' });
+    const l = el('a', { href: URL.createObjectURL(blob), download: `testlista-${a.system}.md` });
+    document.body.append(l); l.click(); l.remove();
+  };
+  c.append(el('div', { class: 'filter' }, el('button', { class: 'växel', onclick: ladda }, 'Ladda ner som Markdown'),
+    el('span', { class: 'svag liten' }, 'Summan av kraven för de valda rollerna, utan dubbletter. Ett test som flera roller kräver står en gång.')));
+  for (const k of kategorier) {
+    const lista = tester.filter((t) => t.kategori === k);
+    c.append(el('h3', {}, `${k} (${lista.length})`), el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('tbody', {}, lista.map((t) => el('tr', {},
+        el('td', { class: 'mono', style: 'white-space:nowrap' }, t.id),
+        el('td', {}, t.text),
+        el('td', {}, statusEl(t.status)),
+        el('td', { class: 'via' }, t.roller.length > 1 ? `${t.roller.length} roller` : rollEtikett(a, t.roller[0])),
+      ))))));
+  }
 }
 
 function ritaArtefakter(c, rader) {
@@ -829,7 +1062,7 @@ sökfält.addEventListener('keydown', (e) => {
 sökfält.addEventListener('blur', () => setTimeout(stängSök, 100));
 
 // ------------------------------------------------------------------ start
-function rita() { ritaMatris(); ritaAlla(); ritaPanel(); }
+function rita() { ritaMatris(); ritaAlla(); ritaSystemlista(); ritaPanel(); }
 function start() {
   if (!DATA) {
     document.getElementById('panel').append(el('p', {}, 'Ingen data. Sidan genereras med ', el('code', {}, 'ig-composer vy'), '.'));

@@ -7,7 +7,8 @@ Detta paket definierar hur Ineras IG:ar komponeras av återanvändbara delar. De
 | Roll | Innehåll | Får komponera |
 |---|---|---|
 | `byggblock` | Kliniskt innehåll: profiler, terminologi, aktörer, förmågor | byggblock |
-| `federation` | Juridiskt utrymme: säkerhetsmetadata, stödtjänster, infrastrukturkrav. Begränsar bara `meta` och `extension`. | federation |
+| `federation` | Juridiskt utrymme: säkerhetsmetadata, stödtjänster, infrastrukturkrav. Begränsar bara `meta` och `extension`. | federation, stödtjänst |
+| `stodtjanst` | Infrastrukturtjänst med eget API som federationer bygger på, t.ex. tjänstekatalogen | stödtjänst |
 | `tjanst` | En cell i matrisen federation × domän. Publiceras. | byggblock, exakt en federation |
 | `konvention` | Detta paket | – |
 
@@ -42,4 +43,6 @@ Användningsfall och delflöden skrivs i ett skissformat (`input/scenarier/*.yam
 | Användningsfall, scenario, delflöde | `ExampleScenario` (processer, steg, alternativ, `step.workflow`) | |
 | Invävning | Federationens [flödesmönster](StructureDefinition-flodesmonster.html) | Invävda steg får [invavd-av](StructureDefinition-invavd-av.html) |
 | Urval i en tjänst | [anvandningsfall](StructureDefinition-anvandningsfall.html) på ImplementationGuide | |
+| Förutsättning för en federation | [forutsattning](StructureDefinition-forutsattning.html) på federationens ImplementationGuide | Ingår i varje tjänst i federationen |
+| Inkludera ett användningsfall i ett annat | `inkludera:` i skissformatet, med `roller:` som binder aktörerna | Blir `step.workflow` |
 | Krav per deltagande aktör | `Requirements` med `satisfiedBy` till profil och förmåga | |

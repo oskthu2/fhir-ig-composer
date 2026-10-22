@@ -1,0 +1,11 @@
+# Inget nuläge inlämnat än: kraven och testlistan går att ta fram, men inte gapet.
+system: LabbsystemL
+titel: Labbsystem L
+organisation: Region Exempel
+andpunkter:
+  - https://lab.region-exempel.se/fhir
+roller:
+  - tjanst: inera.tjanst.journal1177
+    aktor: Journal1177KallsystemFiltrerande
+nulage:
+  anslutningar: nulage/tjanstekatalog-export.json

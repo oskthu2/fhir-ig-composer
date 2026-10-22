@@ -25,11 +25,15 @@ jobs:
           npm install -g fsh-sushi@3
           npm ci --prefix verktyg
 
+      - name: Komponera och bygg alla IG:ar
+        run: node verktyg/ig-composer.mjs bygg
+
+      # Testerna läser bland annat varje IG:s komposition.json från bygget.
       - name: Testa verktyget
         run: npm test --prefix verktyg
 
-      - name: Komponera och bygg alla IG:ar
-        run: node verktyg/ig-composer.mjs bygg
+      - name: Systemrapporter (krav, gap och testlista per system)
+        run: node verktyg/ig-composer.mjs system
 
       - name: Matris federation × domän
         run: |
@@ -43,3 +47,8 @@ jobs:
         with:
           name: matrisvy
           path: vy.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systemrapporter
+          path: rapport/

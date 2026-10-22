@@ -1,0 +1,14 @@
+# Delflöde som Individuell tillgångs flödesmönster väver in efter varje hämtning.
+delflode: IndividuellFiltreraNopat
+nyckel: IND-FN
+titel: Filtrera bort information som inte får visas för invånaren
+syfte: Information märkt NOPAT visas inte för invånaren (IND-C-1).
+
+aktorer:
+  konsument: { roll: IndividuellKonsument, binder: fran }
+
+steg:
+  - titel: Invånartjänsten filtrerar bort information märkt NOPAT
+    fran: konsument
+    till: konsument
+    krav: Invånartjänsten SKA filtrera bort information märkt med säkerhetsetiketten NOPAT innan den visas.

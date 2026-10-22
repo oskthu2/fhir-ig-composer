@@ -7,6 +7,7 @@ Description: "System som gör information tillgänglig för andra vårdgivare in
 * title = "SVOD: källsystem"
 * status = #draft
 * type = #system
+* derivedFrom[0] = Canonical(TjanstekatalogRegistrerare)
 * capabilities = Canonical(SVODKallsystemCS)
 
 Instance: SVODKonsument
@@ -40,6 +41,11 @@ Description: "Infrastrukturkrav på källsystem i SVOD."
 * rest[=].resource[=].searchParam[0].name = "target"
 * rest[=].resource[=].searchParam[=].definition = "http://hl7.org/fhir/SearchParameter/Provenance-target"
 * rest[=].resource[=].searchParam[=].type = #reference
+* rest[+].mode = #client
+* rest[=].documentation = "Källsystemet anmäler vilka patienter som finns hos ändpunkten till patientindex."
+* rest[=].resource[0].type = #List
+* rest[=].resource[=].interaction[0].code = #create
+* rest[=].resource[=].interaction[+].code = #update
 
 Instance: SVODKonsumentCS
 InstanceOf: CapabilityStatement
@@ -59,6 +65,8 @@ Description: "Infrastrukturkrav på konsumenter i SVOD."
 * rest[=].resource[0].type = #Provenance
 * rest[=].resource[=].interaction[0].code = #search-type
 * rest[=].resource[+].type = #AuditEvent
+* rest[=].resource[=].interaction[0].code = #create
+* rest[=].resource[+].type = #Subscription
 * rest[=].resource[=].interaction[0].code = #create
 
 Instance: SVODKallsystemKrav
@@ -107,6 +115,7 @@ InstanceOf: ActorDefinition
 Usage: #definition
 Title: "SVOD: patientrelationstjänst"
 Description: "Stödtjänst som verifierar att användaren har en patientrelation till patienten."
+* insert Stodtjanst
 * name = "SVODPatientrelationstjanst"
 * title = "SVOD: patientrelationstjänst"
 * status = #draft
@@ -118,6 +127,7 @@ InstanceOf: ActorDefinition
 Usage: #definition
 Title: "SVOD: loggtjänst"
 Description: "Stödtjänst som tar emot åtkomstloggar."
+* insert Stodtjanst
 * name = "SVODLoggtjanst"
 * title = "SVOD: loggtjänst"
 * status = #draft
@@ -154,4 +164,61 @@ Description: "Förmågor hos loggtjänsten."
 * format[0] = #json
 * rest[0].mode = #server
 * rest[=].resource[0].type = #AuditEvent
+* rest[=].resource[=].interaction[0].code = #create
+
+Instance: SVODPatientindex
+InstanceOf: ActorDefinition
+Usage: #definition
+Title: "SVOD: patientindex"
+Description: "Stödtjänst som håller reda på vilka patienter som finns hos vilka ändpunkter."
+* insert Stodtjanst
+* name = "SVODPatientindex"
+* title = "SVOD: patientindex"
+* status = #draft
+* type = #system
+* capabilities = Canonical(SVODPatientindexCS)
+
+Instance: SVODPrenumerationstjanst
+InstanceOf: ActorDefinition
+Usage: #definition
+Title: "SVOD: prenumerationstjänst"
+Description: "Stödtjänst som notifierar konsumenter om ny data för patienter de har en vårdrelation till."
+* insert Stodtjanst
+* name = "SVODPrenumerationstjanst"
+* title = "SVOD: prenumerationstjänst"
+* status = #draft
+* type = #system
+* capabilities = Canonical(SVODPrenumerationstjanstCS)
+
+Instance: SVODPatientindexCS
+InstanceOf: CapabilityStatement
+Usage: #definition
+Title: "Förmågor: SVOD, patientindex"
+Description: "Förmågor hos patientindex."
+* name = "SVODPatientindexCS"
+* title = "Förmågor: SVOD, patientindex"
+* status = #draft
+* date = "2026-10-22"
+* kind = #requirements
+* fhirVersion = #5.0.0
+* format[0] = #json
+* rest[0].mode = #server
+* rest[=].resource[0].type = #List
+* rest[=].resource[=].interaction[0].code = #create
+* rest[=].resource[=].interaction[+].code = #update
+
+Instance: SVODPrenumerationstjanstCS
+InstanceOf: CapabilityStatement
+Usage: #definition
+Title: "Förmågor: SVOD, prenumerationstjänst"
+Description: "Förmågor hos prenumerationstjänsten."
+* name = "SVODPrenumerationstjanstCS"
+* title = "Förmågor: SVOD, prenumerationstjänst"
+* status = #draft
+* date = "2026-10-22"
+* kind = #requirements
+* fhirVersion = #5.0.0
+* format[0] = #json
+* rest[0].mode = #server
+* rest[=].resource[0].type = #Subscription
 * rest[=].resource[=].interaction[0].code = #create

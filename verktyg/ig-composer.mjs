@@ -9,6 +9,8 @@
 //   ig-composer installera <ig-katalog>     lägg SUSHI-resultatet i lokal FHIR-cache
 //   ig-composer matris                      skriv matrisen federation × domän
 //   ig-composer vy                          skriv vy.html: interaktiv matris från komposition.json
+//   ig-composer system                      summera krav per system (system/*.yaml), gap mot nuläge
+//                                           och testlista; skriver rapport/<system>.md
 //
 // IG Publisher körs därefter med -no-sushi, så att efterbehandlingen står kvar.
 //
@@ -24,13 +26,14 @@ import {
   parseFsh, ruleLines, entityText, appendRules, parseInsert, expandRules, RESOURCE_TYPE,
 } from './fsh.mjs';
 import { composeScenarios } from './scenario.mjs';
+import { loadSystems, analyseSystem, renderReport } from './system.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
 const OUT_FSH = path.join('input', 'fsh', '_komponerat');
 const OUT_PAGE = path.join('input', 'pagecontent', 'komposition.md');
 const OUT_MANIFEST = 'komposition.json';
 // Konventionens RuleSets som verktyget läser i stället för att expandera.
-const KEEP = new Set(['Obligation', 'Bas', 'Realiserar', 'Kompositionsanvisning', 'KopieradFran', 'KopieradFranInstans']);
+const KEEP = new Set(['Obligation', 'Bas', 'Realiserar', 'Stodtjanst', 'Kompositionsanvisning', 'KopieradFran', 'KopieradFranInstans']);
 const SKIP_DIRS = new Set(['node_modules', 'fsh-generated', 'output', 'temp', 'template', 'input-cache', '.git']);
 
 // ---------------------------------------------------------------- arbetsyta
@@ -86,6 +89,7 @@ function loadIg(dir) {
       efter: sub(flode, 'efter'),
     },
     anvandningsfall: exts.filter((e) => e.url === EXT + 'anvandningsfall').map((e) => e.valueString),
+    forutsattningar: exts.filter((e) => e.url === EXT + 'forutsattning').map((e) => e.valueString),
     dependencies,
   };
 }
@@ -331,16 +335,20 @@ export function compose(ig, ws, rules) {
           fel.push(`Tjänsteaktören ${a.name} ska ha "* capabilities = Canonical(${csName})"; förmågorna genereras (regel aktorer.genereraFormagor)`);
         }
         const ancCs = [...new Set(anc.map((x) => x.actor?.capabilities).filter((c) => capabilities.has(c)))];
-        const modes = [...new Set(ancCs.map((c) => capabilities.get(c).mode).filter(Boolean))];
-        if (modes.length > 1) fel.push(`Förfäderna till ${a.name} har förmågor med olika rest.mode: ${modes.join(', ')}`);
-        const types = [...new Set(ancCs.flatMap((c) => capabilities.get(c).types))];
+        // Ett rest-block per läge (en källsystemsroll är t.ex. server för
+        // kliniskt innehåll men klient mot tjänstekatalogen).
+        const lagen = [...new Set(ancCs.flatMap((c) => capabilities.get(c).rest.map((blk) => blk.mode)).filter(Boolean))];
         const rest = [];
-        for (const type of types) {
-          const prof = exposed.filter((p) => baseType(p) === type);
-          if (!prof.length) continue;
-          rest.push(`* rest[=].resource[+].type = #${type}`);
-          if (prof.length === 1) rest.push(`* rest[=].resource[=].profile = Canonical(${prof[0].name})`);
-          else for (const p of prof) rest.push(`* rest[=].resource[=].supportedProfile[+] = Canonical(${p.name})`);
+        for (const lage of lagen) {
+          rest.push(`* rest[+].mode = #${lage}`, `* rest[=].documentation = "Tjänstens profiler för ${a.title} (${lage}). Interaktioner och sökparametrar följer av de importerade förmågorna."`);
+          const types = [...new Set(ancCs.flatMap((c) => capabilities.get(c).rest.filter((blk) => blk.mode === lage).flatMap((blk) => Object.keys(blk.resurser))))];
+          for (const type of types) {
+            const prof = exposed.filter((p) => baseType(p) === type);
+            if (!prof.length) continue;
+            rest.push(`* rest[=].resource[+].type = #${type}`);
+            if (prof.length === 1) rest.push(`* rest[=].resource[=].profile = Canonical(${prof[0].name})`);
+            else for (const p of prof) rest.push(`* rest[=].resource[=].supportedProfile[+] = Canonical(${p.name})`);
+          }
         }
         const text = [
           `Instance: ${csName}`,
@@ -356,9 +364,7 @@ export function compose(ig, ws, rules) {
           `* fhirVersion = #${ig.fhirVersion}`,
           '* format[0] = #json',
           ...ancCs.map((c) => `* imports[+] = Canonical(${c})`),
-          `* rest[0].mode = #${modes[0] || 'server'}`,
-          `* rest[=].documentation = "Tjänstens profiler för ${a.title}. Interaktioner och sökparametrar följer av de importerade förmågorna."`,
-          ...rest,
+          ...(rest.length ? rest : ['* rest[+].mode = #server']),
         ].join('\n');
         const [e] = parseFsh(text, OUT_FSH);
         e.origin = { paket: ig.id, lage: 'genererad' };
@@ -446,6 +452,7 @@ export function compose(ig, ws, rules) {
   return {
     ig, plan, copied, local, generated, aliases, utelamnat, refererat, exposed, kravprofiler,
     anvandningsfall: scenarier.modell, baseType, basesOf, parentOf, fel, varningar,
+    actors, capabilities, profileByRef, profiles,
   };
 }
 
@@ -466,33 +473,47 @@ function readActor(e) {
     id: e.id,
     title,
     type: rules.map((r) => r.match(/^type\s*=\s*#(\w+)/)?.[1]).find(Boolean) || 'system',
+    stodtjanst: rules.some((r) => /^insert Stodtjanst\b/.test(r)),
     derivedFrom: rules.filter((r) => /^derivedFrom(\[[^\]]*\])?\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, ''))),
     capabilities: rules.filter((r) => /^capabilities\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, '')))[0],
   };
 }
 
 function readCapability(e) {
-  const rules = ruleLines(e);
-  const interactions = {};
-  const systemInteractions = [];
-  let typ = null;
-  for (const r of rules) {
-    const t = r.match(/\.resource\[[^\]]*\]\.type\s*=\s*#(\w+)/);
-    if (t) { typ = t[1]; interactions[typ] ||= []; continue; }
-    const ri = r.match(/\.resource\[[^\]]*\]\.interaction\[[^\]]*\]\.code\s*=\s*#([\w-]+)/);
-    if (ri && typ) { interactions[typ].push(ri[1]); continue; }
-    const si = r.match(/^rest\[[^\]]*\]\.interaction\[[^\]]*\]\.code\s*=\s*#([\w-]+)/);
-    if (si) systemInteractions.push(si[1]);
+  // Förmågor per rest-block: läge (server/client), resurstyper med
+  // interaktioner, sökparametrar och profiler, samt systeminteraktioner.
+  const rest = [];
+  let ri = -1;
+  let res = null;
+  const idx = (tok, len, cur) => (tok === '+' ? len : tok === '=' ? cur : Number(tok));
+  for (const r of ruleLines(e)) {
+    const m = r.match(/^rest\[([^\]]*)\](.*)$/);
+    if (!m) continue;
+    ri = idx(m[1], rest.length, ri);
+    rest[ri] ||= { mode: null, resurser: {}, system: [] };
+    const blk = rest[ri];
+    const rem = m[2];
+    let x;
+    if ((x = rem.match(/^\.mode\s*=\s*#(\w+)/))) blk.mode = x[1];
+    else if ((x = rem.match(/^\.interaction\[[^\]]*\]\.code\s*=\s*#([\w-]+)/))) blk.system.push(x[1]);
+    else if ((x = rem.match(/^\.resource\[[^\]]*\]\.type\s*=\s*#(\w+)/))) {
+      res = blk.resurser[x[1]] ||= { interaktioner: [], sokparametrar: [], profiler: [] };
+    } else if (res && (x = rem.match(/^\.resource\[[^\]]*\]\.interaction\[[^\]]*\]\.code\s*=\s*#([\w-]+)/))) res.interaktioner.push(x[1]);
+    else if (res && (x = rem.match(/^\.resource\[[^\]]*\]\.searchParam\[[^\]]*\]\.name\s*=\s*"(.*)"/))) res.sokparametrar.push(x[1]);
+    else if (res && (x = rem.match(/^\.resource\[[^\]]*\]\.(?:profile|supportedProfile\[[^\]]*\])\s*=\s*(.+)$/))) res.profiler.push(canonicalArg(x[1].trim()));
   }
+  const interactions = {};
+  for (const blk of rest) for (const [t, v] of Object.entries(blk.resurser)) (interactions[t] ||= []).push(...v.interaktioner);
   return {
-    interactions,
-    systemInteractions,
     entity: e,
     name: e.name,
     id: e.id,
-    mode: rules.map((r) => r.match(/^rest\[[^\]]*\]\.mode\s*=\s*#(\w+)/)?.[1]).find(Boolean),
-    types: rules.map((r) => r.match(/\.resource\[[^\]]*\]\.type\s*=\s*#(\w+)/)?.[1]).filter(Boolean),
-    imports: rules.filter((r) => /^imports(\[[^\]]*\])?\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, ''))),
+    rest,
+    mode: rest[0]?.mode,
+    types: [...new Set(rest.flatMap((blk) => Object.keys(blk.resurser)))],
+    interactions,
+    systemInteractions: rest.flatMap((blk) => blk.system),
+    imports: ruleLines(e).filter((r) => /^imports(\[[^\]]*\])?\s*=/.test(r)).map((r) => canonicalArg(r.replace(/^[^=]*=\s*/, ''))),
   };
 }
 
@@ -651,6 +672,26 @@ function titleOf(e) {
   return e.meta.Title || rule?.replace(/^title\s*=\s*"(.*)"$/, '$1') || e.name;
 }
 
+// Källan för en artefakt: kopierad-fran utan version, annars den egna URL:en.
+// Samma källa i två tjänster betyder samma profil med två kanoniska URL:er.
+function kallaAv(e, canonical, typ) {
+  return e.origin.kopieradFran ? e.origin.kopieradFran.split('|')[0] : `${canonical}/${typ}/${e.id}`;
+}
+
+function profilRef(r, ref) {
+  if (ref.startsWith('$')) ref = r.aliases.get(ref)?.aliasValue || ref;
+  const p = r.profileByRef.get(ref);
+  if (!p) return { namn: ref, url: ref, kalla: ref };
+  const url = `${r.ig.canonical}/StructureDefinition/${p.id}`;
+  return { namn: p.name, url, kalla: p.origin.kopieradFran ? p.origin.kopieradFran.split('|')[0] : url };
+}
+
+function forfaderAv(r, p) {
+  const ut = [];
+  for (let q = r.parentOf(p), i = 0; q && i < 20; q = r.parentOf(q), i++) ut.push(q.name);
+  return ut;
+}
+
 function manifest(r) {
   const art = (e) => ({
     namn: e.name,
@@ -664,7 +705,7 @@ function manifest(r) {
     injiceradBas: e.origin.injiceradBas,
   });
   return {
-    ig: { id: r.ig.id, titel: r.ig.title, version: r.ig.version, roll: r.ig.roll, publicering: r.ig.publicering },
+    ig: { id: r.ig.id, titel: r.ig.title, version: r.ig.version, canonical: r.ig.canonical, roll: r.ig.roll, publicering: r.ig.publicering },
     paket: r.plan.map((p) => ({
       id: p.ig.id, titel: p.ig.title, version: p.ig.version, roll: p.ig.roll, inkludering: p.mode, via: p.via,
     })),
@@ -684,6 +725,30 @@ function manifest(r) {
       krav: k.krav.flatMap((req) => req.statements.map((s) => ({ nyckel: s.key, krav: s.requirement, styrka: s.conformance, kalla: req.name }))),
     })),
     anvandningsfall: r.anvandningsfall,
+    // Underlag för systemperspektivet (ig-composer system, vy).
+    formagor: Object.fromEntries([...r.capabilities.values()].map((c) => [c.name, {
+      id: c.id,
+      url: `${r.ig.canonical}/CapabilityStatement/${c.id}`,
+      kalla: kallaAv(c.entity, r.ig.canonical, 'CapabilityStatement'),
+      imports: c.imports,
+      rest: c.rest.map((blk) => ({
+        mode: blk.mode,
+        system: blk.system,
+        resurser: Object.fromEntries(Object.entries(blk.resurser).map(([t, v]) => [t, {
+          interaktioner: v.interaktioner,
+          sokparametrar: v.sokparametrar,
+          profiler: v.profiler.map((ref) => profilRef(r, ref)),
+        }])),
+      })),
+    }])),
+    profiler: Object.fromEntries(r.profiles.map((p) => [p.name, {
+      ...profilRef(r, p.name),
+      forfader: forfaderAv(r, p),
+    }])),
+    aktorer: Object.fromEntries([...r.actors.values()].map((a) => [a.name, {
+      titel: a.title, typ: a.type, stodtjanst: a.stodtjanst, derivedFrom: a.derivedFrom,
+      formagor: a.capabilities, paket: a.entity.origin.paket,
+    }])),
     diagnostik: { fel: r.fel, varningar: r.varningar },
   };
 }
@@ -719,12 +784,22 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 // Data till den interaktiva matrisvyn: arbetsytans IG:ar, matrisen och varje
 // IG:s komposition.json (som skrivs av komponera/bygg).
-export function viewData(ws, root) {
+export function loadManifests(ws) {
   const manifest = {};
   for (const ig of ws.values()) {
     const file = path.join(ig.dir, OUT_MANIFEST);
     if (fs.existsSync(file)) manifest[ig.id] = JSON.parse(fs.readFileSync(file, 'utf8'));
   }
+  return manifest;
+}
+
+export function analyseSystems(ws, root, manifest = loadManifests(ws)) {
+  const regler = loadRules(ws).system || {};
+  return loadSystems(root).map((sys) => analyseSystem(sys, manifest, root, regler));
+}
+
+export function viewData(ws, root) {
+  const manifest = loadManifests(ws);
   return {
     genererad: new Date().toISOString(),
     igs: [...ws.values()].map((ig) => ({
@@ -733,6 +808,7 @@ export function viewData(ws, root) {
     })),
     matris: matrix(ws).json,
     manifest,
+    system: analyseSystems(ws, root, manifest),
   };
 }
 
@@ -901,6 +977,21 @@ function main(argv) {
     console.log(md);
     return 0;
   }
+  if (cmd === 'system') {
+    const analyser = analyseSystems(ws, root).filter((a) => !target || a.system === target);
+    const dir = path.join(root, 'rapport');
+    fs.mkdirSync(dir, { recursive: true });
+    let status = 0;
+    for (const a of analyser) {
+      fs.writeFileSync(path.join(dir, `${a.system}.md`), renderReport(a));
+      const s = a.sammanfattning;
+      console.log(`${a.titel}: ${s.roller} roller · API ${s.apiOk} ok / ${s.apiGap} gap / ${s.apiOkant} okänt · anslutningar ${s.anslutningarOk} ok / ${s.anslutningarGap} gap · ${s.tester} tester`);
+      for (const f of a.fel) console.error(`  fel: ${f}`);
+      if (a.fel.length) status = 1;
+    }
+    console.log(`Rapporter i ${dir}`);
+    return status;
+  }
   if (cmd === 'vy') {
     const data = viewData(ws, root);
     const saknas = [...ws.values()].filter((ig) => ig.komponerar.length && !data.manifest[ig.id]).map((ig) => ig.id);
@@ -940,7 +1031,7 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 

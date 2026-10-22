@@ -8,3 +8,4 @@ Alias: $informationsbehov = https://fhir.inera.se/ig/conventions/StructureDefini
 Alias: $invavd-av = https://fhir.inera.se/ig/conventions/StructureDefinition/invavd-av
 Alias: $restful-interaction = http://hl7.org/fhir/restful-interaction
 Alias: $fhir-types = http://hl7.org/fhir/fhir-types
+Alias: $stodtjanst = https://fhir.inera.se/ig/conventions/StructureDefinition/stodtjanst

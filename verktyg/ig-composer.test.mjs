@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
-import { loadWorkspace, compose, matrix, postProcess, viewData, renderView } from './ig-composer.mjs';
+import { loadWorkspace, compose, matrix, postProcess, viewData, renderView, analyseSystems } from './ig-composer.mjs';
+import { apiStatus } from './system.mjs';
 import { parseFsh, expandRules } from './fsh.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,6 +22,7 @@ test('NPÖ komponeras utan fel', () => {
     ['inera.bb.patientoversikt', 'kopiera'],
     ['inera.bb.fastakontakter', 'kopiera'],
     ['inera.fed.svod', 'kopiera'],
+    ['inera.st.katalog', 'kopiera'],
   ]);
 });
 
@@ -49,8 +51,8 @@ test('federationen ger en bas per exponerad resurstyp', () => {
 
 test('tjänsteaktörens kravprofil följer derivedFrom och baser', () => {
   const k = npo().kravprofiler.find((x) => x.aktor.name === 'NPOKallsystem');
-  assert.deepEqual(k.forfader.map((f) => f.name), ['PSProducent', 'FKProducent', 'SVODKallsystem']);
-  assert.deepEqual(k.formagor.imports, ['PSProducentCS', 'FKProducentCS', 'SVODKallsystemCS']);
+  assert.deepEqual(k.forfader.map((f) => f.name), ['PSProducent', 'FKProducent', 'SVODKallsystem', 'TjanstekatalogRegistrerare']);
+  assert.deepEqual(k.formagor.imports, ['PSProducentCS', 'FKProducentCS', 'SVODKallsystemCS', 'TjanstekatalogRegistrerareCS']);
   const kontakt = k.element.filter((o) => o.profil.name === 'VardkontaktNPO' && o.element === 'extension[kontaktuppgift]');
   assert.deepEqual(kontakt.map((o) => o.kod), ['SHALL:populate', 'SHOULD:populate-if-known']);
   assert.ok(k.element.some((o) => o.aktor === 'SVODKallsystem' && o.kalla.name === 'SVODMetadataEncounter'));
@@ -110,7 +112,7 @@ test('1177 Journal: märkande och filtrerande källsystem får olika krav', () =
   assert.equal(security('Journal1177KallsystemFiltrerande').length, 0);
   // Gemensam förfader importeras en gång.
   assert.deepEqual(k('Journal1177KallsystemMarkande').formagor.imports,
-    ['PSProducentCS', 'FKProducentCS', 'LabProducentCS', 'IndividuellKallsystemCS']);
+    ['PSProducentCS', 'FKProducentCS', 'LabProducentCS', 'IndividuellKallsystemCS', 'TjanstekatalogRegistrerareCS']);
 });
 
 test('RuleSet-expansion ger sökvägar med kontext', () => {
@@ -227,4 +229,72 @@ test('täckningen hittar okänd roll, okänt informationsbehov och saknad förm�
   } finally {
     fs.rmSync(fil);
   }
+});
+
+// ---------------------------------------------------------------- förutsättningar och system
+
+test('federationens förutsättningar ingår i varje tjänst, med inkluderad registrering', () => {
+  const npo = compose(ws.get('inera.tjanst.npo'), loadWorkspace(root), rules);
+  const uc = Object.fromEntries(npo.anvandningsfall.map((u) => [u.namn, u]));
+  assert.ok(uc.AnslutaKallsystemSVOD.forutsattning && uc.AnslutaKonsumentSVOD.forutsattning);
+  assert.ok(uc.RegistreraAndpunkt.endastInkluderad);
+  const kalla = uc.AnslutaKallsystemSVOD.aktorer.find((a) => a.nyckel === 'kalla');
+  assert.deepEqual(kalla.roller, ['SVODKallsystem', 'TjanstekatalogRegistrerare']);
+  assert.deepEqual(kalla.spelasAv, ['NPOKallsystem']);
+  assert.deepEqual(uc.AnslutaKallsystemSVOD.steg.map((s) => s.nr), ['1', '1.1', '1.2', '2']);
+  assert.ok(uc.AnslutaKallsystemSVOD.aktorer.find((a) => a.nyckel === 'katalog').stodtjanst);
+  const j1177 = compose(ws.get('inera.tjanst.journal1177'), loadWorkspace(root), rules);
+  assert.ok(j1177.anvandningsfall.some((u) => u.namn === 'AnslutaKallsystemIndividuell' && u.forutsattning));
+  assert.deepEqual([...npo.fel, ...j1177.fel, ...npo.varningar, ...j1177.varningar], []);
+});
+
+test('tjänsteaktörens genererade förmågor har ett block per läge', () => {
+  const r = compose(ws.get('inera.tjanst.npo'), loadWorkspace(root), rules);
+  const cs = r.capabilities.get('NPOKallsystemCS');
+  assert.deepEqual(cs.rest.map((b) => b.mode), ['server', 'client']);
+  assert.ok(cs.imports.includes('TjanstekatalogRegistrerareCS'));
+});
+
+const systemen = () => Object.fromEntries(analyseSystems(loadWorkspace(root), root).map((a) => [a.system, a]));
+
+test('system: summan av API-krav över roller, med gap mot nuläget', () => {
+  const x = systemen().JournalX;
+  assert.deepEqual(x.fel, []);
+  const api = (lage, typ) => x.api.find((a) => a.lage === lage && a.typ === typ);
+  assert.equal(api('server', 'CareTeam').status, 'saknas');
+  const enc = api('server', 'Encounter');
+  assert.equal(enc.status, 'delvis');
+  assert.deepEqual(enc.sokparametrar.filter((d) => !d.finns).map((d) => d.namn), ['date']);
+  // Den mest specifika profilen per tjänst: VardkontaktNPO ersätter NPÖ:s Vardkontakt.
+  assert.deepEqual(enc.profiler.map((p) => [p.namn, p.tjanst]).sort(),
+    [['Vardkontakt', 'inera.tjanst.journal1177'], ['VardkontaktNPO', 'inera.tjanst.npo']]);
+  // Samma profil (samma källa) med två kanoniska URL:er.
+  const ct = api('server', 'CareTeam').profiler;
+  assert.equal(ct.length, 2);
+  assert.equal(new Set(ct.map((p) => p.kalla)).size, 1);
+  assert.deepEqual(api('server', 'CareTeam').roller.sort(), ['inera.tjanst.journal1177#Journal1177KallsystemMarkande', 'inera.tjanst.npo#NPOKallsystem']);
+});
+
+test('system: gapet räknas om för ett urval av roller', () => {
+  const x = systemen().JournalX;
+  const enc = x.api.find((a) => a.lage === 'server' && a.typ === 'Encounter');
+  assert.equal(apiStatus(enc, new Set(['inera.tjanst.journal1177#Journal1177KallsystemMarkande'])), 'delvis');
+  assert.equal(apiStatus(enc, new Set(['inera.tjanst.npo#NPOKonsument'])), null);
+});
+
+test('system: anslutningar i tjänstekatalogen jämförs med rollerna', () => {
+  const s = systemen();
+  const f = Object.fromEntries(s.JournalX.anslutningar.forvantade.map((x) => [x.roll.split('#')[1], x.status]));
+  assert.deepEqual(f, { NPOKallsystem: 'registrerad', Journal1177KallsystemMarkande: 'annan version' });
+  assert.deepEqual(s.LabbsystemL.anslutningar.forvantade.map((x) => x.status), ['saknas']);
+  assert.deepEqual(s.Invanarplattform.anslutningar.forvantade, []);
+  assert.ok(s.LabbsystemL.api.every((a) => a.status === 'okänt'));
+});
+
+test('system: testlistan har varje krav en gång, med alla roller som ställer det', () => {
+  const x = systemen().JournalX;
+  const elm = x.testlista.filter((t) => t.kategori === 'Elementkrav' && t.text.startsWith('SHALL:populate subject i FastKontakt'));
+  assert.equal(elm.length, 1);
+  assert.equal(elm[0].roller.length, 2);
+  assert.ok(x.testlista.some((t) => t.kategori === 'Scenario' && t.text.startsWith('Ansluta källsystem till SVOD')));
 });

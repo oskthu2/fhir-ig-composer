@@ -110,6 +110,15 @@ Description: "Anges på en tjänste-IG: ett användningsfall (namn i skissformat
 * ^context[=].expression = "ImplementationGuide"
 * value[x] only string
 
+Extension: ForutsattningExt
+Id: forutsattning
+Title: "Förutsättning"
+Description: "Anges på en federations-IG: ett användningsfall (namn i skissformatet) som är en förutsättning för att delta i federationen, t.ex. anslutning och registrering i tjänstekatalogen. Ingår automatiskt i varje tjänst i federationen."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ImplementationGuide"
+* value[x] only string
+
 Extension: FlodesmonsterExt
 Id: flodesmonster
 Title: "Flödesmönster"
@@ -169,3 +178,12 @@ Description: "Sätts av ig-composer på steg i ett ExampleScenario som vävts in
 * ^context[+].type = #element
 * ^context[=].expression = "ExampleScenario.process.step"
 * value[x] only string
+
+Extension: StodtjanstExt
+Id: stodtjanst
+Title: "Stödtjänst"
+Description: "Anges på en ActorDefinition: aktören är en stödtjänst som federationen eller stödtjänsten själv tillhandahåller (t.ex. tjänstekatalogen, loggtjänsten). Den spelas inte av tjänsternas system."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ActorDefinition"
+* value[x] only boolean

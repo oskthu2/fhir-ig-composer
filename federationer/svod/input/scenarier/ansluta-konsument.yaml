@@ -1,0 +1,16 @@
+# Förutsättning (extension forutsattning på SVOD): ingår i varje tjänst i SVOD.
+anvandningsfall: AnslutaKonsumentSVOD
+nyckel: SVOD-AC
+titel: Ansluta konsument till SVOD
+syfte: Konsumenten ska få veta när det finns ny information om patienter den har en vårdrelation till.
+
+aktorer:
+  konsument: SVODKonsument
+  prenumeration: SVODPrenumerationstjanst
+
+steg:
+  - titel: Konsumenten registrerar en prenumeration på ny data
+    fran: konsument
+    till: prenumeration
+    operation: create
+    resurstyp: Subscription

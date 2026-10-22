@@ -1,0 +1,63 @@
+{
+  "resourceType": "CapabilityStatement",
+  "id": "invanarplattform",
+  "status": "active",
+  "date": "2026-10-01",
+  "kind": "instance",
+  "software": {
+    "name": "1177 invånarplattform"
+  },
+  "implementation": {
+    "description": "1177 invånarplattform",
+    "url": "https://api.1177.se/fhir"
+  },
+  "fhirVersion": "5.0.0",
+  "format": [
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "client",
+      "interaction": [
+        {
+          "code": "search-system"
+        }
+      ],
+      "resource": [
+        {
+          "type": "Encounter",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/journal1177/StructureDefinition/vardkontakt"
+          ]
+        },
+        {
+          "type": "CareTeam",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/journal1177/StructureDefinition/fast-kontakt"
+          ]
+        },
+        {
+          "type": "Observation",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "supportedProfile": [
+            "https://fhir.inera.se/ig/journal1177/StructureDefinition/labbsvar"
+          ]
+        }
+      ]
+    }
+  ]
+}

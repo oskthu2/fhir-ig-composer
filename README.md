@@ -73,6 +73,62 @@ I matrisvyn har varje tjänst och byggblock fliken **Användningsfall** med sekv
 
 Kedjan i FHIR: `ExampleScenario` → `Requirements` (per aktör) → `satisfiedBy` profil och `CapabilityStatement` → tjänsteaktör (`ActorDefinition.derivedFrom`) → i tjänstekatalogen `TKAPIInstance.instantiates` → ändpunkt.
 
+## Förutsättningar och stödtjänster
+
+Att delta i en federation är också användningsfall. En federation anger dem med extensionen `forutsattning`, och de ingår automatiskt i varje tjänst i federationen:
+
+| Federation | Förutsättning | Innehåll |
+|---|---|---|
+| SVOD | Ansluta källsystem till SVOD | inkluderar *Registrera ändpunkt och API-instanser i tjänstekatalogen*, anmäla patienter till patientindex |
+| SVOD | Ansluta konsument till SVOD | prenumerera på ny data |
+| Individuell tillgång | Ansluta källsystem för individuell tillgång | inkluderar registreringen; invånartjänsten hämtar källsystemets CapabilityStatement |
+
+**Stödtjänster** (`ig-roll = stodtjanst`) är infrastrukturtjänster med eget API som federationerna bygger på. Tjänstekatalogen är den första. Den har aktörerna `Tjanstekatalog` och `TjanstekatalogRegistrerare` och användningsfallet `RegistreraAndpunkt`. Federationernas källsystemsroller härleds från registreraren, så varje tjänsts källsystem får kravet att registrera sig. Aktörer som tillhandahålls av en federation eller stödtjänst (katalog, patientindex, loggtjänst …) markeras med `* insert Stodtjanst` och spelas inte av tjänsternas system.
+
+I skissformatet kan ett användningsfall **inkludera** ett annat:
+
+```yaml
+steg:
+  - inkludera: RegistreraAndpunkt
+    roller: { registrerare: kalla, katalog: katalog }
+```
+
+Den inkluderade aktören binds till en aktör i det inkluderande fallet, som då spelar båda rollerna. I FHIR blir det `step.workflow`.
+
+Förmågor läses och genereras per `rest`-block, alltså per läge. Ett källsystem är server för kliniskt innehåll men klient mot tjänstekatalogen och patientindex. Täckningskontrollen kräver interaktionen som klient hos avsändaren och som server hos mottagaren.
+
+## Systemperspektiv: summan av krav, test och gap
+
+Ett konkret system antar ofta flera roller i olika tjänster och användningsfall. `system/*.yaml` beskriver det:
+
+```yaml
+system: JournalX
+titel: Journalsystem X
+andpunkter: [https://fhir.journalx.region-exempel.se/r5]
+roller:
+  - { tjanst: inera.tjanst.npo, aktor: NPOKallsystem }
+  - { tjanst: inera.tjanst.npo, aktor: NPOKonsument }
+  - { tjanst: inera.tjanst.journal1177, aktor: Journal1177KallsystemMarkande }
+nulage:
+  formaga: nulage/journalx-metadata.json          # CapabilityStatement kind=instance (GET [bas]/metadata)
+  anslutningar: nulage/tjanstekatalog-export.json # API-instanser (TKAPIInstance) från tjänstekatalogen
+```
+
+`ig-composer system` (efter `bygg`) tar fram följande per system, och skriver `rapport/<system>.md`:
+
+- **Summan av API-krav** per läge och resurstyp, över alla roller. Interaktioner, sökparametrar och profiler kommer från tjänsteaktörernas förmågor och allt de importerar. Den mest specifika profilen räcker: `VardkontaktNPO` ersätter NPÖ:s `Vardkontakt`. Samma profil i två tjänster (samma `kopierad-fran`) visas som en profil med två kanoniska URL:er, och systemet måste ange båda.
+- **Elementkrav, verksamhetskrav och scenariosteg** som systemet deltar i, inklusive förutsättningarna.
+- **Gap mot nuläget:** saknade resurstyper, interaktioner, sökparametrar och profiler i systemets CapabilityStatement.
+- **Anslutningar:** en roll som härleds från registreraren förväntas ha en API-instans i tjänstekatalogen som följer tjänstens API-specifikation (`url|version`). Status: registrerad, annan version eller saknas.
+- **Testlista:** varje krav en gång, med de roller som ställer det. API-krav och anslutningar får status från nuläget, övriga krav är manuella.
+
+I matrisvyn finns systemen under **System**. Välj vilka av systemets roller som ska summeras, så räknas kraven, gapet och testlistan om. API-kraven kan grupperas per resurstyp, roll eller status, och testlistan kan laddas ner.
+
+Exempelsystemen visar olika lägen:
+- **Journalsystem X:** CareTeam saknas som server; sökparametern `date` och 1177:s Vårdkontakt-profil saknas; Subscription saknas; registreringen för 1177 gäller en äldre version.
+- **1177 invånarplattform:** inga gap.
+- **Labbsystem L:** inget nuläge inlämnat, så API-gapet är okänt, och registreringen saknas.
+
 ## Interaktiv matrisvy
 
 ```sh
@@ -97,11 +153,15 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 │   ├── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter
 │   └── labbsvar/              inera.bb.labbsvar        (byggblock, intern)
 ├── federationer/
-│   ├── svod/                  inera.fed.svod           (federation, intern)
-│   └── individuell/           inera.fed.individuell    (federation, intern)
+│   ├── svod/                  inera.fed.svod           (federation, intern)  – komponerar Tjänstekatalogen
+│   └── individuell/           inera.fed.individuell    (federation, intern)  – komponerar Tjänstekatalogen
+├── stodtjanster/
+│   └── katalog/               inera.st.katalog         (stödtjänst, intern)
 ├── tjanster/
 │   ├── npo/                   inera.tjanst.npo         (tjänst, publik)   – SVOD × Patientöversikt
 │   └── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
+├── system/                    konkreta system: roller de antar, ändpunkter och nuläge
+│   └── nulage/                CapabilityStatement (kind=instance) och export från tjänstekatalogen
 └── verktyg/                   ig-composer (Node ≥ 20)
 ```
 
@@ -196,9 +256,12 @@ Elementkrav per systemroll skrivs `* element insert Obligation(#SHALL:populate, 
 
 NPÖ har byggts med IG Publisher 3.0.1 (`-no-sushi` efter `komponera` → `sushi` → `efterbehandla`). Före kravmodellen: **0 fel, 48 varningar**. 23 av varningarna är `kopierad-fran` som pekar på interna byggblock som inte publiceras, vilket är väntat. Resten är vanliga för Ineras IG:ar: HSA-OID:n saknar definition, kanoniska länkar i Requirements-narrativ, bindningar i bas-FHIR och OID för terminologi. Obligations i snapshoten för Vårdkontakt NPÖ blir de ärvda (PSProducent, PSKonsument) plus den egna (NPOKallsystem).
 
-Med kravmodellen: **3 fel, 85 varningar**. De 3 felen kommer från IG-mallen `fhir2.base.template`: dess `layout-examplescenario.html` lägger `<h4>` direkt under sidans `<h2>`, vilket IG Publishers kontroll av rubriknivåer (WCAG) räknar som fel. De går inte att rätta från en IG och behöver rättas i mallen. Varningarna som tillkommit är av samma slag som tidigare: kanoniska länkar i Requirements-narrativ och `kopierad-fran` mot interna byggblock.
+Med kravmodell, förutsättningar och stödtjänster: NPÖ **6 fel, 120 varningar**, 1177 Journal **4 fel, 106 varningar**. Alla fel är samma mallfel, ett per ExampleScenario. IG-mallen `fhir2.base.template` lägger i `layout-examplescenario.html` en `<h4>` direkt under sidans `<h2>`, och IG Publishers kontroll av rubriknivåer (WCAG) räknar det som fel. Det går inte att rätta från en IG, utan mallen behöver rättas. Varningarna gäller nästan bara referenser som inte går att slå upp, och de är väntade:
+- `kopierad-fran` mot interna byggblock;
+- tjänstekatalogens profiler (`tk-endpoint`, `tk-api-instance`), eftersom IG:n Tjänstekatalogen inte är publicerad än;
+- kanoniska länkar i narrativen för Requirements.
 
-1177 Journal (utan användningsfall): **0 fel, 62 varningar**, varav 32 är `kopierad-fran` mot interna byggblock. Resten är av samma slag som för NPÖ, plus IG Publishers rekommendation att labbsvar har `performer`.
+1177 Journal före kravmodellen: **0 fel, 62 varningar**, varav 32 är `kopierad-fran` mot interna byggblock. Resten är av samma slag som för NPÖ, plus IG Publishers rekommendation att labbsvar har `performer`.
 
 ## Utdata
 
@@ -230,8 +293,9 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 - Dela upp i egna repon och lägg `ig-composer` som steg i `fhir-ig-workflows`.
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera genererade `<Aktör>CS` som `TKAPISpecificationCapability` i tjänstekatalogen.
+- Hämta nuläget direkt: läs `GET [bas]/metadata` och tjänstekatalogens sök-API i stället för filer.
+- Testskript: generera `TestScript` per system ur testlistan.
 - Avlämningsyta: `ig-composer leverera` med låsfil, kanaler (utkast, kandidat, fastställd) och ändringsrapport per systemroll, så att ändringar inte slår igenom i tjänsterna direkt.
 - Härleda tjänsternas förmågor ur scenariernas operationer, i stället för handskrivna förmågor i byggblocken.
-- Användningsfall för 1177 Journal, med Individuell tillgångs delflöden (filtrera NOPAT).
 - Täckning vidare mot test (`TestScript` per aktör) och drift (ändpunkter i tjänstekatalogen).
 - Regel för kandidater att lyfta: samma skärpning i flera tjänster → lyft till byggblocket.

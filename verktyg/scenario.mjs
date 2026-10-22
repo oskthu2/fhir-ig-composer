@@ -42,10 +42,12 @@ export function composeScenarios(ctx) {
 
   let valda;
   if (ig.roll === 'tjanst') {
-    valda = ig.anvandningsfall.map((n) => {
+    // Tjänstens valda användningsfall, plus federationens förutsättningar.
+    const forut = regler.forutsattningar ? (ctx.fed?.forutsattningar || []) : [];
+    valda = [...ig.anvandningsfall, ...forut.filter((n) => !ig.anvandningsfall.includes(n))].map((n) => {
       const uc = anvandningsfall.find((a) => a.anvandningsfall === n);
-      if (!uc) fel(true, `Användningsfallet ${n} finns inte i något komponerat paket (extension anvandningsfall)`);
-      return uc;
+      if (!uc) fel(true, `Användningsfallet ${n} finns inte i något komponerat paket (extension ${forut.includes(n) ? 'forutsattning' : 'anvandningsfall'})`);
+      return uc && { ...uc, forutsattning: forut.includes(n) && !ig.anvandningsfall.includes(n) };
     }).filter(Boolean);
   } else {
     valda = anvandningsfall.filter((a) => a.paket === ig.id);
@@ -75,9 +77,10 @@ export function composeScenarios(ctx) {
     for (const s of spelasAv) if (ctx.actors.get(s)?.capabilities) namn.add(ctx.actors.get(s).capabilities);
     return [...namn].map((n) => ctx.capabilities.get(n)).filter(Boolean);
   };
-  const harInteraktion = (cs, op, typ) => cs.some((c) => (SYSTEM_OPS.has(op)
-    ? c.systemInteractions.includes(op)
-    : (c.interactions[typ] || []).includes(op)));
+  // Avsändaren behöver interaktionen som klient, mottagaren som server.
+  const harInteraktion = (cs, op, typ, lage) => cs.some((c) => c.rest.some((blk) => blk.mode === lage && (SYSTEM_OPS.has(op)
+    ? blk.system.includes(op)
+    : (blk.resurser[typ]?.interaktioner || []).includes(op))));
 
   const genererat = [];
   const modell = [];
@@ -145,7 +148,38 @@ export function composeScenarios(ctx) {
         })),
       };
     };
+    // Inkluderar ett annat användningsfall: roller binder dess aktörer till
+    // detta användningsfalls aktörer.
+    const inkludera = (s, nummer) => {
+      const d = skisser.find((x) => x.namn === s.inkludera);
+      if (!d) {
+        fel(true, `${skiss.namn}: inkluderar ${s.inkludera}, som inte finns i något komponerat paket`);
+        return;
+      }
+      inkluderade.add(d.namn);
+      const karta = {};
+      for (const [k, def] of Object.entries(d.aktorer || {})) {
+        const dd = typeof def === 'string' ? { roll: def } : def;
+        const mal = s.roller?.[k];
+        if (mal) {
+          karta[k] = mal;
+          bana(mal, { roll: dd.roll }, skiss.namn);
+        } else {
+          const ny = banor.has(k) ? `${k}-${d.nyckel || d.namn}` : k;
+          karta[k] = ny;
+          bana(ny, dd, d.namn);
+        }
+      }
+      steg.push({ nr: String(nummer), typ: 'inkludering', titel: d.titel, inkluderad: d.namn, alternativ: [] });
+      (d.steg || []).forEach((x, i) => {
+        steg.push(stegModell({ ...x, fran: karta[x.fran], till: karta[x.till] }, `${nummer}.${i + 1}`, { inkluderad: d.namn }));
+      });
+    };
     for (const s of skiss.steg || []) {
+      if (s.inkludera) {
+        inkludera(s, ++nr);
+        continue;
+      }
       const vavs = !arDelflode && monster && s.operation && monster.vid.includes(s.operation);
       if (vavs && monster.fore && !(monster.foreEnGang && foreVavd)) {
         vav(monster.fore, s, ++nr);
@@ -168,7 +202,7 @@ export function composeScenarios(ctx) {
       b.typ = a0?.type || 'system';
       b.titel ||= a0?.title || b.nyckel;
       b.paket = a0 ? a0.entity.origin.paket : null;
-      b.stodtjanst = b.typ === 'system' && b.roller.every((r) => ctx.rollOf(ctx.actors.get(r)?.entity) === 'federation') && !b.binder;
+      b.stodtjanst = b.roller.some((r) => ctx.actors.get(r)?.stodtjanst);
       b.spelasAv = ctx.serviceActors.filter((s) => {
         const anc = new Set([s.name, ...ctx.ancestorsOf(s.name).map((x) => x.name)]);
         return b.roller.every((r) => anc.has(r));
@@ -188,20 +222,30 @@ export function composeScenarios(ctx) {
       for (const sida of ['fran', 'till']) {
         const b = banor.get(s[sida]);
         if (!b) continue;
-        const ok = (RESOURCE_OPS.has(s.operation) && !s.resurstyp) ? null : harInteraktion(b.formagor, s.operation, s.resurstyp);
+        if (s.fran === s.till) continue;
+        const ok = (RESOURCE_OPS.has(s.operation) && !s.resurstyp) ? null : harInteraktion(b.formagor, s.operation, s.resurstyp, sida === 'fran' ? 'client' : 'server');
         s.tackning[sida] = ok;
         if (ok === false) {
-          fel('formagaSaknas', `${skiss.namn} steg ${s.nr}: ${b.titel} (${b.roller.join(' + ')}) saknar ${s.operation}${s.resurstyp ? ` på ${s.resurstyp}` : ''} i sina förmågor`);
+          fel('formagaSaknas', `${skiss.namn} steg ${s.nr}: ${b.titel} (${b.roller.join(' + ')}) saknar ${s.operation}${s.resurstyp ? ` på ${s.resurstyp}` : ''} som ${sida === 'fran' ? 'klient' : 'server'} i sina förmågor`);
         }
       }
     }
   };
 
   const kompilerade = [];
+  const inkluderade = new Set();
   for (const uc of valda) kompilerade.push(kompilera(uc, false));
   const anvandaDelfloden = new Set([monster?.fore, monster?.efter].filter((n) => n && delfloden.has(n)));
   if (ig.roll !== 'tjanst') for (const d of delfloden.values()) if (d.paket === ig.id) anvandaDelfloden.add(d.delflode);
   for (const n of anvandaDelfloden) kompilerade.push(kompilera(delfloden.get(n), true));
+  // Inkluderade användningsfall som inte redan är valda kompileras också,
+  // så att step.workflow har något att peka på.
+  for (const n of inkluderade) {
+    if (kompilerade.some((k) => k.skiss.namn === n)) continue;
+    const k = kompilera(skisser.find((x) => x.namn === n), true);
+    k.endastInkluderad = true;
+    kompilerade.push(k);
+  }
   for (const k of kompilerade) analysera(k);
 
   // ---- FHIR: ExampleScenario och Requirements
@@ -219,7 +263,7 @@ export function composeScenarios(ctx) {
       '* status = #draft',
       skiss.syfte ? `* purpose = "${fshStr(skiss.syfte)}"` : null,
     ];
-    const egnaSteg = allaSteg(steg).filter((s) => s.typ === 'operation' && !s.invavd);
+    const egnaSteg = allaSteg(steg).filter((s) => s.typ === 'operation' && !s.invavd && !s.inkluderad);
     const anvandaBanor = new Set(egnaSteg.flatMap((s) => [s.fran, s.till]).filter(Boolean));
     for (const b of banor.values()) {
       if (!anvandaBanor.has(b.nyckel)) continue;
@@ -259,6 +303,10 @@ export function composeScenarios(ctx) {
         rader.push(`* process[=].step[=].workflow = Canonical(${s.delflode})`, `* process[=].step[=].extension[$invavd-av].valueString = "${s.invavd}"`);
         continue;
       }
+      if (s.typ === 'inkludering') {
+        rader.push(`* process[=].step[=].workflow = Canonical(${s.inkluderad})`);
+        continue;
+      }
       rader.push(...operation(s, '* process[=].step[=]'));
       for (const a of s.alternativ) {
         rader.push(`* process[=].step[=].alternative[+].title = "${fshStr(a.titel)}"`);
@@ -295,7 +343,8 @@ export function composeScenarios(ctx) {
     }
     k.krav = [];
     // I en tjänst finns delflödenas krav redan invävda i användningsfallens krav.
-    const genereraKrav = regler.genereraKrav && !(ig.roll === 'tjanst' && skiss.delflode);
+    // ... och inkluderade användningsfalls krav i de användningsfall som inkluderar dem.
+    const genereraKrav = regler.genereraKrav && !(ig.roll === 'tjanst' && skiss.delflode) && !k.endastInkluderad;
     if (genereraKrav) {
       for (const [banNyckel, lista] of satser) {
         const b = banor.get(banNyckel);
@@ -328,6 +377,8 @@ export function composeScenarios(ctx) {
     modell.push({
       namn: k.skiss.namn,
       typ: k.skiss.anvandningsfall ? 'anvandningsfall' : 'delflode',
+      forutsattning: !!k.skiss.forutsattning,
+      endastInkluderad: !!k.endastInkluderad,
       nyckel: k.skiss.nyckel,
       titel: k.skiss.titel,
       syfte: k.skiss.syfte,
@@ -349,7 +400,7 @@ function stegUt(s) {
   return {
     nr: s.nr, typ: s.typ, titel: s.titel, fran: s.fran || null, till: s.till || null, operation: s.operation || null,
     informationsbehov: s.informationsbehov?.nyckel || null, profil: s.informationsbehov?.profil?.name || null,
-    resurstyp: s.resurstyp || null, delflode: s.delflode || null, invavd: s.invavd || null,
+    resurstyp: s.resurstyp || null, delflode: s.delflode || null, invavd: s.invavd || null, inkluderad: s.inkluderad || null,
     krav: s.kravtext || null, tackning: s.tackning || null,
     alternativ: (s.alternativ || []).map((a) => ({ titel: a.titel, steg: a.steg.map(stegUt) })),
   };

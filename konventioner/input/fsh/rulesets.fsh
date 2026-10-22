@@ -45,3 +45,7 @@ RuleSet: KopieradFranInstans(url)
 //   * insert Realiserar(VardkontaktInfo)
 RuleSet: Realiserar(informationsbehov)
 * ^extension[$realiserar][+].valueCanonical = Canonical({informationsbehov})
+
+// Aktören är en stödtjänst som federationen tillhandahåller.
+RuleSet: Stodtjanst
+* extension[$stodtjanst].valueBoolean = true

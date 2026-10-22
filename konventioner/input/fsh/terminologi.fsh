@@ -10,6 +10,7 @@ Description: "Vilken roll en IG har i kompositionen."
 * ^content = #complete
 * #byggblock "Byggblock" "Domänbyggblock: kliniskt innehåll (profiler, terminologi, aktörer). Publiceras normalt inte som tjänst."
 * #federation "Federation" "Juridiskt utrymme: säkerhetsmetadata, stödtjänster och infrastrukturkrav. Begränsar aldrig kliniska element."
+* #stodtjanst "Stödtjänst" "Infrastrukturtjänst med eget API som federationer bygger på, t.ex. tjänstekatalogen. Dess aktörer och användningsfall vävs in i tjänsterna via federationen."
 * #tjanst "Tjänst" "En cell i matrisen federation × domän. Komponeras av byggblock och exakt en federation, och publiceras."
 * #konvention "Konvention" "Definierar själva kompositionsmekanismen (detta paket)."
 

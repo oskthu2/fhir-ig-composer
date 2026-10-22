@@ -1,0 +1,25 @@
+anvandningsfall: TaDelAvLabbsvar
+nyckel: LAB-UC
+titel: Ta del av labbsvar
+syfte: Den som har rätt att ta del av patientens labbsvar ska kunna se dem, med referensintervall.
+
+aktorer:
+  lasare: LabLasare
+  app: LabKonsument
+  kalla: LabProducent
+
+informationsbehov:
+  labbsvar: LabbsvarInfo
+
+steg:
+  - titel: Läsaren öppnar labbsvaren
+    fran: lasare
+    till: app
+  - titel: Appen söker patientens labbsvar
+    fran: app
+    till: kalla
+    operation: search-type
+    hamtar: labbsvar
+  - titel: Appen visar labbsvaren med referensintervall
+    fran: app
+    till: lasare

@@ -6,6 +6,7 @@ Id: labbsvar
 Title: "Labbsvar"
 Description: "Ett laboratoriesvar (analysresultat)."
 * ^status = #draft
+* insert Realiserar(LabbsvarInfo)
 * status MS
 * category ^slicing.discriminator.type = #value
 * category ^slicing.discriminator.path = "$this"
