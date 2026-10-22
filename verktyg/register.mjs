@@ -16,7 +16,7 @@ import { fhir } from './mock.mjs';
 export const IG_TAGG = 'https://fhir.inera.se/ig/conventions/CodeSystem/ig';
 const DEFINITIONER = new Set([
   'StructureDefinition', 'ValueSet', 'CodeSystem', 'CapabilityStatement', 'ActorDefinition', 'Requirements',
-  'ExampleScenario', 'ImplementationGuide', 'SearchParameter', 'OperationDefinition', 'ConceptMap',
+  'ExampleScenario', 'PlanDefinition', 'ActivityDefinition', 'ImplementationGuide', 'SearchParameter', 'OperationDefinition', 'ConceptMap',
 ]);
 
 export const registerUrl = (flagga) => (flagga || process.env.FHIR_REGISTER || 'http://localhost:8080/fhir').replace(/\/$/, '');
@@ -75,7 +75,8 @@ export async function sok(server, fraga) {
   const ut = [];
   let url = `${server}/${fraga}`;
   for (let i = 0; url && i < 50; i++) {
-    const svar = await fhir(url);
+    // HAPI cachar sökresultat; registret ska alltid läsa det senast publicerade.
+    const svar = await fhir(url, { headers: { 'cache-control': 'no-cache' } });
     if (svar.json?.resourceType !== 'Bundle') throw new Error(`${url}: HTTP ${svar.status}`);
     ut.push(...(svar.json.entry || []).map((e) => e.resource));
     url = (svar.json.link || []).find((l) => l.relation === 'next')?.url || null;
@@ -96,12 +97,14 @@ export async function listaRegister(server) {
   return [...per].map(([ig, typer]) => ({ ig, typer })).sort((a, b) => a.ig.localeCompare(b.ig));
 }
 
-// ExampleScenario ur registret, med resolver för step.workflow.
+// Ett flöde ur registret – ExampleScenario (tillämpat) eller PlanDefinition
+// (logiskt), efter den kanoniska URL:ens typ – med resolver för delflödena.
 export async function scenarioFranRegister(server, url) {
   const cache = new Map();
   const hamta = async (u) => {
     const [bas, version] = u.split('|');
-    if (!cache.has(u)) cache.set(u, (await sok(server, `ExampleScenario?url=${encodeURIComponent(bas)}${version ? `&version=${encodeURIComponent(version)}` : ''}`))[0] || null);
+    const typ = /\/PlanDefinition\//.test(bas) ? 'PlanDefinition' : 'ExampleScenario';
+    if (!cache.has(u)) cache.set(u, (await sok(server, `${typ}?url=${encodeURIComponent(bas)}${version ? `&version=${encodeURIComponent(version)}` : ''}`))[0] || null);
     return cache.get(u);
   };
   const es = await hamta(url);
@@ -109,8 +112,8 @@ export async function scenarioFranRegister(server, url) {
   // Läs in delflödena i förväg, så att resolvern kan vara synkron.
   const koa = [es];
   for (let i = 0; i < koa.length && i < 50; i++) {
-    for (const w of JSON.stringify(koa[i]).match(/"workflow":"[^"]+"/g) || []) {
-      const sub = await hamta(w.slice(12, -1));
+    for (const w of JSON.stringify(koa[i]).match(/"(workflow|definitionCanonical)":"[^"]+"/g) || []) {
+      const sub = await hamta(w.split('":"')[1].slice(0, -1));
       if (sub && !koa.includes(sub)) koa.push(sub);
     }
   }

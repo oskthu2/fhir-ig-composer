@@ -1,0 +1,9 @@
+# Tillämpning: bindningar av aktiviteter i de logiska flödena till
+# interaktioner, där den härledda bindningen inte räcker.
+# <flöde>: { <steg-id eller nr>: { operation, resurstyp } }
+
+# Federationens "ta reda på vad källsystemet stödjer" görs med capability
+# discovery, inte med en sökning.
+AnslutaKallsystemIndividuell:
+  formagor:
+    operation: capabilities

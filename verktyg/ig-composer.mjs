@@ -23,8 +23,8 @@
 //                                           publicera IG:arnas definitioner i ett FHIR-register (HAPI R5,
 //                                           standard FHIR_REGISTER eller http://localhost:8080/fhir)
 //   ig-composer mermaid <fil|url> [--server URL] [--rubrik]
-//                                           sekvensdiagram ur ett ExampleScenario (fil eller kanonisk
-//                                           URL i registret)
+//                                           diagram ur ett flöde: ExampleScenario (sekvens) eller
+//                                           PlanDefinition (simbanor); fil eller kanonisk URL i registret
 //   ig-composer studio [--port N]           lokal server: vyn med redigering av system, användningsfall
 //                                           och komposition
 //   ig-composer externa hamta [--mot <miljö>] hämta de externa specifikationerna (basic auth
@@ -46,7 +46,7 @@ import {
 import { composeScenarios } from './scenario.mjs';
 import { loadSystems, analyseSystem, renderReport } from './system.mjs';
 import { byggFederation, testaFederation, korFederation, renderFederationReport } from './federation.mjs';
-import { anvandningsfallSida, mermaidFranScenario } from './mermaid.mjs';
+import { anvandningsfallSida, mermaidFranScenario, arbetsflodesSida, mermaidFranPlan } from './mermaid.mjs';
 import { startaStudio } from './studio.mjs';
 import { registerUrl, publiceraRegister, listaRegister, scenarioFranRegister } from './register.mjs';
 import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
@@ -491,8 +491,11 @@ export function compose(ig, ws, rules) {
   const realiserar = (p) => expandRules(p, ruleSets, KEEP)
     .filter((r) => r.insert?.name === 'Realiserar' && !r.path)
     .map((r) => r.insert.args[0]);
+  // Tjänstens tillämpning: bindningar som överstyr de härledda.
+  const tillampningFil = path.join(ig.dir, 'input', 'tillampning.yaml');
+  const tillampning = fs.existsSync(tillampningFil) ? YAML.parse(fs.readFileSync(tillampningFil, 'utf8')) || {} : {};
   const scenarier = composeScenarios({
-    ig, rules, plan, ws,
+    ig, rules, plan, ws, informationsmangder, tillampning,
     fed: federationer[0]?.ig,
     entities: all,
     actors, ancestorsOf, capabilities,
@@ -728,12 +731,15 @@ function renderPage(r) {
   }
 
   if (r.anvandningsfall.length) {
-    out.push('', '### Användningsfall och delflöden', '', 'Kompilerade från skissformatet till ExampleScenario och Requirements. Steg markerade *invävt* kommer från federationens flödesmönster.');
+    const logisk = r.anvandningsfall[0].niva === 'logisk';
+    out.push('', '### Användningsfall och delflöden', '', logisk
+      ? 'Logiska arbetsflöden, kompilerade från skissformatet till PlanDefinition (workflow-definition) och Requirements. Aktiviteterna binds till interaktioner i tjänsterna.'
+      : 'Tillämpade flöden, kompilerade från skissformatet till ExampleScenario och Requirements. Varje aktivitet är bunden till en interaktion och den specifikation den följer. Steg markerade *invävt* kommer från federationens flödesmönster.');
     for (const u of r.anvandningsfall) {
-      out.push('', `#### ${u.titel}`, '', `${u.typ === 'anvandningsfall' ? 'Användningsfall' : 'Delflöde'} [${u.namn}](ExampleScenario-${u.namn}.html) från ${code(u.paket)}.${u.syfte ? ` ${u.syfte}` : ''}`, '');
+      out.push('', `#### ${u.titel}`, '', `${u.typ === 'anvandningsfall' ? 'Användningsfall' : 'Delflöde'} [${u.namn}](${u.resurs || 'ExampleScenario'}-${u.namn}.html) från ${code(u.paket)}.${u.tillampar ? ` Tillämpar ${code(u.tillampar)}.` : ''}${u.syfte ? ` ${u.syfte}` : ''}`, '');
       const bana = (k) => u.aktorer.find((a) => a.nyckel === k)?.titel || k;
       for (const st of u.steg) {
-        const vad = st.typ === 'delflode' ? `*invävt:* ${st.titel} (${code(st.invavd)})` : `${st.titel}${st.fran ? ` – ${bana(st.fran)} → ${bana(st.till)}` : ''}${st.operation ? ` (${code(st.operation)}${st.profil ? `, ${st.profil}` : st.resurstyp ? `, ${st.resurstyp}` : ''})` : ''}`;
+        const vad = st.typ === 'delflode' ? `*invävt:* ${st.titel} (${code(st.invavd)})` : `${st.titel}${st.fran ? ` – ${bana(st.fran)} → ${bana(st.till)}` : ''}${st.aktivitet && !st.operation ? ` (${st.aktivitet})` : ''}${st.operation ? ` (${st.aktivitet ? `${st.aktivitet} → ` : ''}${code(st.operation)}${st.profil ? `, ${st.profil}` : st.resurstyp ? `, ${st.resurstyp}` : ''}${st.specifikation ? `, enligt [${st.specifikation}](CapabilityStatement-${st.specifikation}.html)` : ''})` : ''}`;
         out.push(`${'   '.repeat(st.nr.split('.').length - 1)}${st.nr.split('.').length > 1 ? '-' : '1.'} ${st.nr}: ${vad}`);
       }
       if (u.krav.length) out.push('', `Krav: ${u.krav.map((k) => `[${k.namn}](Requirements-${k.namn}.html)`).join(', ')}.`);
@@ -909,9 +915,11 @@ function mermaidPerIg(ws) {
   for (const ig of ws.values()) {
     const dir = path.join(ig.dir, 'fsh-generated', 'resources');
     if (!fs.existsSync(dir)) continue;
-    const alla = fs.readdirSync(dir).filter((f) => f.startsWith('ExampleScenario-') && f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+    const alla = fs.readdirSync(dir).filter((f) => /^(ExampleScenario|PlanDefinition)-.*\.json$/.test(f)).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
     const resolver = (u) => alla.find((x) => x.url === u.split('|')[0]) || null;
-    if (alla.length) ut[ig.id] = Object.fromEntries(alla.map((es) => [es.name, mermaidFranScenario(es, { resolver })]));
+    if (alla.length) {
+      ut[ig.id] = Object.fromEntries(alla.map((r) => [r.name, r.resourceType === 'PlanDefinition' ? mermaidFranPlan(r, { resolver }) : mermaidFranScenario(r, { resolver })]));
+    }
   }
   return ut;
 }
@@ -960,31 +968,37 @@ const NOT_INHERITED = new Set([EXT + 'kopierad-fran', EXT + 'kompositionsanvisni
 // parent skulle annars se kopierad ut. Sådana extensions tas bort.
 const OBLIGATION = 'http://hl7.org/fhir/StructureDefinition/obligation';
 
-// Sidan Användningsfall: ett sekvensdiagram per användningsfall, genererat ur
-// IG:ns ExampleScenario-resurser efter SUSHI. Sidan och menyvalet läggs till i
-// SUSHI:s ImplementationGuide och meny. Returnerar antalet diagram.
+// Sidan med flödena, genererad efter SUSHI: i ett logiskt paket ett
+// simbanediagram per arbetsflöde (PlanDefinition), i en tjänst eller
+// stödtjänst ett sekvensdiagram per användningsfall (ExampleScenario). Sidan
+// och menyvalet läggs till i SUSHI:s ImplementationGuide och meny.
+// Returnerar antalet diagram.
 export function flodessida(igDir) {
   const res = path.join(igDir, 'fsh-generated', 'resources');
   if (!fs.existsSync(res)) return 0;
-  const scenarier = fs.readdirSync(res).filter((f) => f.startsWith('ExampleScenario-') && f.endsWith('.json'))
+  const las = (prefix) => fs.readdirSync(res).filter((f) => f.startsWith(prefix) && f.endsWith('.json'))
     .map((f) => JSON.parse(fs.readFileSync(path.join(res, f), 'utf8')));
+  const planer = las('PlanDefinition-');
+  const logisk = planer.length > 0;
+  const scenarier = logisk ? planer : las('ExampleScenario-');
   if (!scenarier.length) return 0;
   // Användningsfall, inte delflöden: enligt manifestet, annars de som inget annat pekar på.
   const manifestFil = path.join(igDir, OUT_MANIFEST);
   const manifest = fs.existsSync(manifestFil) ? JSON.parse(fs.readFileSync(manifestFil, 'utf8')) : null;
   const typ = new Map((manifest?.anvandningsfall || []).map((u) => [u.namn, u]));
-  const anropade = new Set(scenarier.flatMap((es) => JSON.stringify(es).match(/"workflow":"[^"]+"/g) || []).map((w) => w.slice(12, -1).split('|')[0]));
+  const anropade = new Set(scenarier.flatMap((es) => JSON.stringify(es).match(/"(workflow|definitionCanonical)":"[^"]+"/g) || []).map((w) => w.split('":"')[1].slice(0, -1).split('|')[0]));
   const valda = scenarier.filter((es) => (typ.size ? typ.get(es.name)?.typ === 'anvandningsfall' && !typ.get(es.name)?.endastInkluderad : !anropade.has(es.url)))
     .sort((a, b) => Number(!!typ.get(a.name)?.forutsattning) - Number(!!typ.get(b.name)?.forutsattning) || a.name.localeCompare(b.name));
   if (!valda.length) return 0;
   const resolver = (url) => scenarier.find((x) => x.url === url.split('|')[0]) || null;
-  fs.writeFileSync(path.join(igDir, 'input', 'pagecontent', 'anvandningsfall.md'), anvandningsfallSida(valda, resolver));
+  const sidtitel = logisk ? 'Arbetsflöden' : 'Användningsfall';
+  fs.writeFileSync(path.join(igDir, 'input', 'pagecontent', 'anvandningsfall.md'), logisk ? arbetsflodesSida(valda, resolver) : anvandningsfallSida(valda, resolver));
   const igFil = fs.readdirSync(res).find((f) => f.startsWith('ImplementationGuide-'));
   if (igFil) {
     const igJson = JSON.parse(fs.readFileSync(path.join(res, igFil), 'utf8'));
     const sidor = igJson.definition.page.page ||= [];
     if (!sidor.some((p) => p.name === 'anvandningsfall.html')) {
-      sidor.splice(1, 0, { sourceUrl: 'anvandningsfall.html', name: 'anvandningsfall.html', title: 'Användningsfall', generation: 'markdown' });
+      sidor.splice(1, 0, { sourceUrl: 'anvandningsfall.html', name: 'anvandningsfall.html', title: sidtitel, generation: 'markdown' });
       fs.writeFileSync(path.join(res, igFil), JSON.stringify(igJson, null, 2) + '\n');
     }
   }
@@ -992,7 +1006,7 @@ export function flodessida(igDir) {
   if (fs.existsSync(meny)) {
     const xml = fs.readFileSync(meny, 'utf8');
     if (!xml.includes('anvandningsfall.html')) {
-      fs.writeFileSync(meny, xml.replace(/(\s*<li>\s*<a href="artifacts\.html">)/, '\n  <li>\n    <a href="anvandningsfall.html">Användningsfall</a>\n  </li>$1'));
+      fs.writeFileSync(meny, xml.replace(/(\s*<li>\s*<a href="artifacts\.html">)/, `\n  <li>\n    <a href="anvandningsfall.html">${sidtitel}</a>\n  </li>$1`));
     }
   }
   return valda.length;
@@ -1198,13 +1212,15 @@ function main(argv) {
     const rubrik = args.includes('--rubrik');
     if (fs.existsSync(target)) {
       const dir = path.dirname(path.resolve(target));
-      const alla = fs.readdirSync(dir).filter((f) => f.startsWith('ExampleScenario-') && f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
-      console.log(mermaidFranScenario(JSON.parse(fs.readFileSync(target, 'utf8')), { resolver: (u) => alla.find((x) => x.url === u.split('|')[0]) || null, rubrik }));
+      const alla = fs.readdirSync(dir).filter((f) => /^(ExampleScenario|PlanDefinition)-.*\.json$/.test(f)).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+      const r = JSON.parse(fs.readFileSync(target, 'utf8'));
+      const resolver = (u) => alla.find((x) => x.url === u.split('|')[0]) || null;
+      console.log(r.resourceType === 'PlanDefinition' ? mermaidFranPlan(r, { resolver }) : mermaidFranScenario(r, { resolver, rubrik }));
       return 0;
     }
     return scenarioFranRegister(server, target).then((r) => {
       if (!r) throw new Error(`ExampleScenario ${target} finns inte i ${server}`);
-      console.log(mermaidFranScenario(r.es, { resolver: r.resolver, rubrik }));
+      console.log(r.es.resourceType === 'PlanDefinition' ? mermaidFranPlan(r.es, { resolver: r.resolver }) : mermaidFranScenario(r.es, { resolver: r.resolver, rubrik }));
       return 0;
     });
   }
@@ -1292,7 +1308,7 @@ function main(argv) {
       const fixed = postProcess(ig.dir);
       if (fixed) console.log(`  efterbehandling: ${fixed} rättelser av ärvda extensions`);
       const diagram = flodessida(ig.dir);
-      if (diagram) console.log(`  sidan Användningsfall: ${diagram} sekvensdiagram ur ExampleScenario`);
+      if (diagram) console.log(`  flödessidan: ${diagram} diagram (PlanDefinition eller ExampleScenario)`);
       if (installeras(ig)) console.log(`  installerad i ${installLocal(ig.dir)}`);
     }
     return status;

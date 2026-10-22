@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import os from 'node:os';
 import { loadWorkspace, compose, matrix, postProcess, viewData, renderView, analyseSystems, flodessida, komponeraAlla } from './ig-composer.mjs';
-import { mermaidFranScenario } from './mermaid.mjs';
+import { mermaidFranScenario, mermaidFranPlan } from './mermaid.mjs';
 import { transaktion, definitioner, IG_TAGG, publiceraRegister, scenarioFranRegister } from './register.mjs';
-import { startaStudio, skrivKomposition, skrivSystem, skrivSkiss } from './studio.mjs';
+import { startaStudio, skrivKomposition, skrivSystem, skrivSkiss, skrivTillampning } from './studio.mjs';
 import { apiStatus, loadSystems, analyseSystem } from './system.mjs';
 import { MockFederation, fhir } from './mock.mjs';
 import { testaFederation, byggFederation } from './federation.mjs';
@@ -237,6 +237,8 @@ test('täckningen hittar okänd roll, okänt informationsbehov och saknad förm�
     assert.ok(r.fel.some((f) => f.includes('rollen FinnsInte')));
     assert.ok(r.fel.some((f) => f.includes('OkandInfo') && f.includes('logisk modell')));
     assert.ok(r.varningar.some((f) => f.includes('saknar delete på Encounter')));
+    // Ett byggblock har logiska flöden: interaktioner hör hemma i tjänsten.
+    assert.ok(r.fel.some((f) => f.includes('TestFall steg 1: read är en tillämpning')));
   } finally {
     fs.rmSync(fil);
   }
@@ -504,8 +506,14 @@ test('registret mot HAPI (sätt FHIR_REGISTER_TEST)', { skip: !process.env.FHIR_
   assert.equal(forsta.http, 200);
   const [andra] = await publiceraRegister({ server, igs });
   assert.equal(andra.uppdaterade, andra.antal, 'en ny körning uppdaterar i stället för att skapa');
-  const r = await scenarioFranRegister(server, 'https://fhir.inera.se/ig/bb-pot2/ExampleScenario/HamtaPatientoversikt');
-  assert.match(mermaidFranScenario(r.es, { resolver: r.resolver }), /konsument->>producent: 2 Konsumenten söker patientens diagnoser/);
+  // Byggblocket har ett logiskt arbetsflöde: PlanDefinition och simbanor.
+  const r = await scenarioFranRegister(server, 'https://fhir.inera.se/ig/bb-pot2/PlanDefinition/HamtaPatientoversikt');
+  assert.equal(r.es.resourceType, 'PlanDefinition');
+  assert.match(mermaidFranPlan(r.es, { resolver: r.resolver }), /hämtar diagnos från Patientöversikt \(T2\): producent/);
+  // Tjänsten har det tillämpade flödet: ExampleScenario och sekvens.
+  await publiceraRegister({ server, igs: [ws.get('inera.tjanst.pot2')] });
+  const t = await scenarioFranRegister(server, 'https://fhir.inera.se/ig/po-t2/ExampleScenario/HamtaPatientoversikt');
+  assert.match(mermaidFranScenario(t.es, { resolver: t.resolver }), /konsument->>producent: 4 Konsumenten söker patientens diagnoser \[search-type\]/);
 });
 
 // Studion arbetar på en kopia av arbetsytan.
@@ -570,6 +578,79 @@ test('studions server: kräver X-Studio för att skriva, och visar ändringen ef
     assert.equal(data.studio.konfiguration['inera.fed.pot2'].roll, 'federation');
   } finally {
     server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------- logiska och tillämpade flöden
+
+const lasRes = (ig, prefix) => fs.readdirSync(esKatalog(ig)).filter((f) => f.startsWith(prefix)).map((f) => JSON.parse(fs.readFileSync(path.join(esKatalog(ig), f), 'utf8')));
+
+test('logiska flöden: byggblock och federationer får PlanDefinition (workflow-definition) med aktiviteter', () => {
+  assert.deepEqual(lasRes('byggblock/patientoversikt', 'ExampleScenario-'), []);
+  const pd = lasRes('byggblock/patientoversikt', 'PlanDefinition-').find((x) => x.name === 'VardpersonalPatientoversikt');
+  assert.equal(pd.type.coding[0].code, 'workflow-definition');
+  assert.deepEqual(pd.action.map((a) => a.code?.coding[0].code || null), [null, 'hamta', 'hamta', 'visa']);
+  const hamta = pd.action[1];
+  assert.deepEqual(hamta.participant.map((p) => p.actorId), ['journal', 'kalla']);
+  assert.equal(hamta.output[0].requirement.profile[0], 'https://fhir.inera.se/ig/bb-patientoversikt/StructureDefinition/VardkontaktInfo');
+  // Ordningen: varje åtgärd efter den föregående, med giltiga id (pld-4).
+  const ids = new Set(pd.action.map((a) => a.id));
+  assert.ok(pd.action.slice(1).every((a) => ids.has(a.relatedAction[0].targetId) && a.relatedAction[0].relationship === 'after'));
+  // Alternativ som grupp under åtgärden.
+  assert.equal(hamta.selectionBehavior, 'at-most-one');
+  assert.match(hamta.action[0].title, /^Alternativ: Källsystemet svarar inte/);
+  // Federationens förutsättning inkluderar stödtjänstens flöde.
+  const ak = lasRes('federationer/svod', 'PlanDefinition-').find((x) => x.name === 'AnslutaKallsystemSVOD');
+  assert.match(ak.action[0].definitionCanonical, /PlanDefinition\/RegistreraAndpunkt$/);
+  // Simbanor i diagrammet.
+  const mm = mermaidFranPlan(pd);
+  assert.match(mm, /^flowchart LR/);
+  assert.match(mm, /subgraph bana_journal \["Patientöversikt: konsument"\]/);
+  assert.match(mm, /hämtar vårdkontakt från Patientöversikt: producent/);
+  assert.match(mm, /a_2 -\. "Källsystemet svarar inte" \.->/);
+});
+
+test('tillämpning: tjänsten binder aktiviteterna till interaktioner och specifikationer', () => {
+  const npo = compose(ws.get('inera.tjanst.npo'), loadWorkspace(root), rules);
+  const uc = npo.anvandningsfall.find((u) => u.namn === 'VardpersonalPatientoversikt');
+  assert.equal(uc.niva, 'tillampad');
+  assert.equal(uc.tillampar, 'https://fhir.inera.se/ig/bb-patientoversikt/PlanDefinition/VardpersonalPatientoversikt|0.1.0');
+  const steg = (nr) => uc.steg.find((s) => s.nr === nr);
+  assert.deepEqual([steg('5').aktivitet, steg('5').operation, steg('5').resurstyp, steg('5').specifikation, steg('5').bindning],
+    ['hamta', 'search-type', 'Encounter', 'VardkontaktAPI', 'harledd']);
+  // Federationens logiska delflöden binds mot stödtjänsternas förmågor.
+  assert.deepEqual([steg('2.1').operation, steg('2.1').specifikation], ['search-system', 'SVODPatientrelationstjanstCS']);
+  assert.deepEqual([steg('6.2').aktivitet, steg('6.2').operation, steg('6.2').resurstyp], ['lamna', 'create', 'AuditEvent']);
+  // Stödtjänstens tillämpade flöde (T1) behåller sin interaktion och följer tjänstekatalogens förmåga.
+  assert.deepEqual([steg('4.1').bindning, steg('4.1').specifikation], ['flode', 'TjanstekatalogCS']);
+  // ExampleScenario pekar på arbetsflödet och på specifikationen per steg.
+  const es = lasEs('tjanster/npo').find((x) => x.name === 'VardpersonalPatientoversikt');
+  assert.equal(es.extension.find((e) => e.url.endsWith('/tillampar')).valueCanonical, uc.tillampar);
+  const s5 = es.process[0].step.find((x) => x.number === '5');
+  assert.equal(s5.extension.find((e) => e.url.endsWith('/specifikation')).valueCanonical, 'https://fhir.inera.se/ig/npo/CapabilityStatement/VardkontaktAPI');
+  assert.equal(s5.extension.find((e) => e.url.endsWith('/bindning')).valueCode, 'harledd');
+  // 1177 Journal binder "kontrollera" till capability discovery i sin tillämpning.
+  const j = compose(ws.get('inera.tjanst.journal1177'), loadWorkspace(root), rules);
+  const ak = j.anvandningsfall.find((u) => u.namn === 'AnslutaKallsystemIndividuell').steg.find((s) => s.id === 'formagor');
+  assert.deepEqual([ak.aktivitet, ak.operation, ak.bindning], ['kontrollera', 'capabilities', 'tillampning']);
+  assert.deepEqual([...npo.fel, ...npo.varningar, ...j.fel, ...j.varningar], []);
+});
+
+test('studion skriver och tar bort en bindning i tjänstens tillämpning', () => {
+  const dir = kopieraArbetsyta();
+  try {
+    const w = loadWorkspace(dir);
+    skrivTillampning(w, 'inera.tjanst.npo', { flode: 'SVODVerifieraPatientrelation', steg: '1', operation: 'search-type', resurstyp: 'Consent' }, dir);
+    const fil = path.join(dir, 'tjanster', 'npo', 'input', 'tillampning.yaml');
+    assert.deepEqual(YAML.parse(fs.readFileSync(fil, 'utf8')), { SVODVerifieraPatientrelation: { 1: { operation: 'search-type', resurstyp: 'Consent' } } });
+    const r = compose(loadWorkspace(dir).get('inera.tjanst.npo'), loadWorkspace(dir), rules);
+    const s = r.anvandningsfall.find((u) => u.namn === 'VardpersonalPatientoversikt').steg.find((x) => x.nr === '2.1');
+    assert.deepEqual([s.operation, s.resurstyp, s.bindning], ['search-type', 'Consent', 'tillampning']);
+    skrivTillampning(loadWorkspace(dir), 'inera.tjanst.npo', { flode: 'SVODVerifieraPatientrelation', steg: '1', ta_bort: true }, dir);
+    assert.ok(!fs.existsSync(fil), 'utan bindningar tas filen bort');
+    assert.throws(() => skrivTillampning(w, 'inera.bb.pot2', { flode: 'x', steg: '1' }, dir), /ingen tjänst/);
+  } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

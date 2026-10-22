@@ -1,5 +1,16 @@
 // Kravmodellen: användningsfall och delflöden i skissformatet
-// (input/scenarier/*.yaml) kompileras till ExampleScenario och Requirements.
+// (input/scenarier/*.yaml) på två nivåer:
+//
+//   logisk     i byggblock och federationer: rena arbetsflöden med aktiviteter
+//              (hämta, lämna, registrera …), roller och information, utan
+//              FHIR-interaktioner. Kompileras till PlanDefinition
+//              (workflow-definition) och Requirements.
+//   tillämpad  i stödtjänster och tjänster: varje aktivitet binds till en
+//              interaktion i mottagarens förmågor (CapabilityStatement) och
+//              tjänstens specifikation per informationsmängd – härledd, eller
+//              angiven i tjänstens input/tillampning.yaml. Kompileras till
+//              ExampleScenario och Requirements.
+//
 // Federationens flödesmönster vävs in, informationsbehov harmoniseras till
 // profiler, och täckningen kontrolleras hela vägen från scenariots steg till
 // aktörernas förmågor.
@@ -13,6 +24,25 @@ import YAML from 'yaml';
 const RESOURCE_OPS = new Set(['read', 'vread', 'update', 'patch', 'delete', 'history-instance', 'history-type', 'create', 'search-type']);
 const SYSTEM_OPS = new Set(['search-system', 'history-system', 'transaction', 'batch']);
 const RESTFUL = new Set([...RESOURCE_OPS, ...SYSTEM_OPS, 'capabilities', 'operation']);
+// Aktiviteter i logiska arbetsflöden, och de interaktioner en tillämpning kan
+// binda dem till (i prioritetsordning).
+export const AKTIVITETER = {
+  hamta: { verb: ['hämta', 'hämtar'], ops: ['search-type', 'read', 'search-system'], hamtar: true },
+  kontrollera: { verb: ['kontrollera', 'kontrollerar'], ops: ['search-type', 'read', 'search-system'], hamtar: true },
+  lamna: { verb: ['lämna', 'lämnar'], ops: ['create'] },
+  registrera: { verb: ['registrera', 'registrerar'], ops: ['create', 'update'] },
+  uppdatera: { verb: ['uppdatera', 'uppdaterar'], ops: ['update'] },
+  meddela: { verb: ['meddela', 'meddelar'], ops: ['create'] },
+  visa: { verb: ['visa', 'visar'], ops: [] },
+  utfora: { verb: ['utföra', 'utför'], ops: [] },
+};
+// Aktiviteten bakom en interaktion i ett tillämpat flöde.
+const AKTIVITET_FOR_OP = {
+  'search-type': 'hamta', read: 'hamta', vread: 'hamta', 'search-system': 'hamta', create: 'registrera',
+  update: 'uppdatera', patch: 'uppdatera', capabilities: 'kontrollera', token: 'hamta',
+};
+const aktivitetAv = (s) => s.aktivitet || (s.hamtar ? 'hamta' : s.skickar ? 'lamna' : AKTIVITET_FOR_OP[s.operation])
+  || (s.fran && s.fran === s.till ? 'utfora' : null);
 const VERB = {
   read: ['läsa', 'läser'], vread: ['läsa', 'läser'], 'search-type': ['söka', 'söker'], 'search-system': ['söka', 'söker'],
   create: ['skapa', 'skapar'], update: ['uppdatera', 'uppdaterar'], patch: ['ändra', 'ändrar'], delete: ['ta bort', 'tar bort'],
@@ -40,6 +70,23 @@ export function composeScenarios(ctx) {
   const anvandningsfall = skisser.filter((s) => s.anvandningsfall);
   const delfloden = new Map(skisser.filter((s) => s.delflode).map((s) => [s.delflode, s]));
   const fel = (regel, text) => ctx.report(regel === true ? 'fel' : regler.tackning[regel] || 'fel', text);
+  // Nivå: logiska flöden i byggblock och federationer, tillämpade i övriga.
+  const logiskaRoller = regler.logiska || ['byggblock', 'federation'];
+  const nivaFor = (roll) => (logiskaRoller.includes(roll) ? 'logisk' : 'tillampad');
+  const igNiva = nivaFor(ig.roll);
+  const paketNiva = (id) => nivaFor(ctx.ws?.get(id)?.roll);
+  // Ett logiskt flöde anger aktiviteter, inte interaktioner.
+  const validera = (skiss) => {
+    if (skiss.paket !== ig.id) return;
+    const kontrollera = (lista, var_) => (lista || []).forEach((st, i) => {
+      if (st.aktivitet && !AKTIVITETER[st.aktivitet]) fel(true, `${skiss.namn} steg ${var_}${i + 1}: okänd aktivitet ${st.aktivitet} (${Object.keys(AKTIVITETER).join(', ')})`);
+      if (paketNiva(skiss.paket) === 'logisk' && (st.operation || st.resurstyp)) {
+        fel('tillampningILogisktFlode', `${skiss.namn} steg ${var_}${i + 1}: ${st.operation || st.resurstyp} är en tillämpning; ett logiskt flöde i ${ig.roll === 'federation' ? 'en federation' : 'ett byggblock'} anger aktivitet (${Object.keys(AKTIVITETER).join(', ')}), och tjänsten binder den`);
+      }
+      for (const a of st.alternativ || []) kontrollera(a.steg, `${var_}${i + 1}.alt.`);
+    });
+    kontrollera(skiss.steg, '');
+  };
 
   let valda;
   if (ig.roll === 'tjanst') {
@@ -88,6 +135,7 @@ export function composeScenarios(ctx) {
   const modell = [];
 
   const kompilera = (skiss, arDelflode) => {
+    validera(skiss);
     const banor = new Map(); // nyckel → { nyckel, titel, typ, roller[], kalla }
     const bana = (nyckel, def, kalla) => {
       const d = typeof def === 'string' ? { roll: def } : def;
@@ -133,20 +181,23 @@ export function composeScenarios(ctx) {
       const ursprung = { delflode: d.delflode, invavd: ctx.fed.id, nyckel: d.nyckel || d.delflode };
       steg.push({ nr: String(nummer), typ: 'delflode', titel: d.titel, ...ursprung, alternativ: [] });
       (d.steg || []).forEach((s, i) => {
-        steg.push(stegModell({ ...s, fran: karta[s.fran], till: karta[s.till] }, `${nummer}.${i + 1}`, ursprung));
+        steg.push(stegModell({ ...s, fran: karta[s.fran], till: karta[s.till] }, `${nummer}.${i + 1}`, ursprung, { flode: d.delflode, nr: String(i + 1) }));
       });
     };
     // ursprung: { delflode, invavd, nyckel } för steg som vävts in från ett delflöde.
-    const stegModell = (s, nummer, ursprung = {}) => {
-      const i = informationFor(s.hamtar || s.skickar);
+    // kalla: { flode, nr } – var steget står i sin egen skiss (för tillämpningen).
+    const stegModell = (s, nummer, ursprung = {}, kalla = { flode: skiss.namn, nr: String(nummer) }) => {
+      const aktivitet = aktivitetAv(s);
+      const i = informationFor(s.information || s.hamtar || s.skickar);
       return {
         nr: String(nummer), typ: 'operation', titel: s.titel, fran: s.fran, till: s.till, operation: s.operation,
-        informationsbehov: i, riktning: s.skickar ? 'skickar' : s.hamtar ? 'hamtar' : null,
+        aktivitet, id: s.id || null, kalla,
+        informationsbehov: i, riktning: AKTIVITETER[aktivitet]?.hamtar ? 'hamtar' : i ? 'skickar' : null,
         resurstyp: i?.typ || s.resurstyp || null, kravtext: s.krav, styrka: s.styrka || 'SHALL',
         ...ursprung,
         alternativ: (s.alternativ || []).map((a) => ({
           titel: a.titel,
-          steg: (a.steg || []).map((as, j) => stegModell(as, `${nummer}.alt${j + 1}`, ursprung)),
+          steg: (a.steg || []).map((as, j) => stegModell(as, `${nummer}.alt${j + 1}`, ursprung, { flode: kalla.flode, nr: `${kalla.nr}.alt${j + 1}` })),
         })),
       };
     };
@@ -174,7 +225,7 @@ export function composeScenarios(ctx) {
       }
       steg.push({ nr: String(nummer), typ: 'inkludering', titel: d.titel, inkluderad: d.namn, alternativ: [] });
       (d.steg || []).forEach((x, i) => {
-        steg.push(stegModell({ ...x, fran: karta[x.fran], till: karta[x.till] }, `${nummer}.${i + 1}`, { inkluderad: d.namn }));
+        steg.push(stegModell({ ...x, fran: karta[x.fran], till: karta[x.till] }, `${nummer}.${i + 1}`, { inkluderad: d.namn }, { flode: d.namn, nr: String(i + 1) }));
       });
     };
     for (const s of skiss.steg || []) {
@@ -184,7 +235,8 @@ export function composeScenarios(ctx) {
       }
       // Invävning: fore (ev. bara en gång), foreVarje före varje matchande
       // steg (t.ex. T2-uppslaget), efter efter varje matchande steg.
-      const vavs = !arDelflode && monster && s.operation && monster.vid.includes(s.operation);
+      const akt = aktivitetAv(s);
+      const vavs = !arDelflode && monster && (monster.vid.includes(s.operation) || monster.vid.includes(akt));
       if (vavs && !(monster.foreEnGang && foreVavd)) {
         for (const n of monster.fore) vav(n, s, ++nr);
         foreVavd = true;
@@ -194,6 +246,47 @@ export function composeScenarios(ctx) {
       if (vavs) for (const n of monster.efter) vav(n, s, ++nr);
     }
     return { skiss, banor, info, steg };
+  };
+
+  // Mottagarens serverförmåga: resurstyper med interaktioner och systeminteraktioner.
+  const serverAv = (b) => {
+    const typer = new Map();
+    const system = new Set();
+    for (const c of b.formagor) {
+      for (const blk of c.rest.filter((x) => x.mode === 'server')) {
+        blk.system.forEach((x) => system.add(x));
+        for (const [t, v] of Object.entries(blk.resurser)) {
+          if (!typer.has(t)) typer.set(t, new Set());
+          v.interaktioner.forEach((x) => typer.get(t).add(x));
+        }
+      }
+    }
+    return { typer, system };
+  };
+  // Aktivitet + information + mottagarens förmågor → interaktion.
+  const binda = (s, till) => {
+    const ops = AKTIVITETER[s.aktivitet].ops;
+    const server = serverAv(till);
+    const resursOps = ops.filter((o) => RESOURCE_OPS.has(o));
+    const typ = s.informationsbehov?.typ || s.resurstyp;
+    if (typ) {
+      const op = resursOps.find((o) => server.typer.get(typ)?.has(o)) || resursOps[0];
+      return op ? { operation: op, resurstyp: typ } : null;
+    }
+    const kandidater = [...server.typer].filter(([, set]) => resursOps.some((o) => set.has(o)));
+    if (kandidater.length === 1) return { operation: resursOps.find((o) => kandidater[0][1].has(o)), resurstyp: kandidater[0][0] };
+    if (ops.includes('search-system') && server.system.has('search-system')) return { operation: 'search-system', resurstyp: null };
+    return null;
+  };
+  // Specifikationen steget följer: tjänstens API för informationsmängden, annars
+  // den förmåga hos mottagaren som har interaktionen (t.ex. tjänstekatalogens).
+  const specifikationFor = (s, till) => {
+    const mangd = s.informationsbehov && (ctx.informationsmangder || []).find((m) => m.nyckel === s.informationsbehov.lm);
+    if (mangd) return mangd.namn;
+    const har = (c) => c.rest.some((blk) => blk.mode === 'server' && (s.resurstyp
+      ? (blk.resurser[s.resurstyp]?.interaktioner || []).includes(s.operation)
+      : blk.system.includes(s.operation)));
+    return (till?.formagor || []).find(har)?.name || null;
   };
 
   const allaSteg = (steg) => steg.flatMap((s) => [s, ...(s.alternativ || []).flatMap((a) => a.steg)]);
@@ -225,6 +318,27 @@ export function composeScenarios(ctx) {
       // I en tjänst heter scenarioaktören som den tjänsteaktör som spelar den.
       if (!b.egenTitel && b.spelasAv.length === 1) b.titel = ctx.actors.get(b.spelasAv[0]).title;
       b.formagor = formagorFor(b.roller, b.spelasAv);
+    }
+    // Tillämpning: varje aktivitet binds till en interaktion i mottagarens
+    // förmågor, om flödet inte redan anger den.
+    for (const s of allaSteg(k.steg)) {
+      if (s.typ !== 'operation') continue;
+      const till = banor.get(s.till);
+      if (!s.aktivitet && till?.typ === 'person') s.aktivitet = 'visa';
+      if (igNiva !== 'tillampad') continue;
+      const over = ctx.tillampning?.[s.kalla.flode]?.[s.id || s.kalla.nr];
+      if (over) {
+        if ('operation' in over) s.operation = over.operation || null;
+        if ('resurstyp' in over) s.resurstyp = over.resurstyp || null;
+        s.bindning = 'tillampning';
+      } else if (s.operation) {
+        s.bindning = 'flode';
+      } else if (AKTIVITETER[s.aktivitet]?.ops.length && till && s.fran !== s.till && till.typ !== 'person') {
+        const b = binda(s, till);
+        if (b) Object.assign(s, b, { bindning: 'harledd' });
+        else fel('obundenAktivitet', `${skiss.namn} steg ${s.nr}: aktiviteten ${s.aktivitet} mot ${till.titel} går inte att binda till en interaktion i dess förmågor; ange den i ${ig.id}:s input/tillampning.yaml (${s.kalla.flode}: "${s.id || s.kalla.nr}")`);
+      }
+      if (s.operation) s.specifikation = specifikationFor(s, till);
     }
     // Förmågor: har avsändare och mottagare interaktionen?
     for (const s of allaSteg(k.steg)) {
@@ -260,11 +374,16 @@ export function composeScenarios(ctx) {
   }
   for (const k of kompilerade) analysera(k);
 
-  // ---- FHIR: ExampleScenario och Requirements
+  // ---- FHIR: PlanDefinition (logisk) eller ExampleScenario (tillämpad), och Requirements
   const url = (typ, id) => `${ig.canonical}/${typ}/${id}`;
+  const flodesTyp = igNiva === 'logisk' ? 'PlanDefinition' : 'ExampleScenario';
   for (const k of kompilerade) {
     const { skiss, banor, info, steg } = k;
-    const rader = [
+    if (igNiva === 'logisk') genererat.push({ text: planDefinition(k), namn: skiss.namn });
+    // Det logiska arbetsflöde ett tillämpat flöde tillämpar.
+    const kallIg = ctx.ws?.get(skiss.paket);
+    k.tillampar = igNiva === 'tillampad' && paketNiva(skiss.paket) === 'logisk' && kallIg ? `${kallIg.canonical}/PlanDefinition/${skiss.namn}|${kallIg.version}` : null;
+    const rader = igNiva === 'logisk' ? null : [
       `Instance: ${skiss.namn}`,
       'InstanceOf: ExampleScenario',
       'Usage: #definition',
@@ -274,7 +393,9 @@ export function composeScenarios(ctx) {
       `* title = "${fshStr(skiss.titel)}"`,
       '* status = #draft',
       skiss.syfte ? `* purpose = "${fshStr(skiss.syfte)}"` : null,
+      k.tillampar ? `* extension[$tillampar].valueCanonical = "${k.tillampar}"` : null,
     ];
+    if (rader) {
     const egnaSteg = allaSteg(steg).filter((s) => s.typ === 'operation' && !s.invavd && !s.inkluderad);
     const anvandaBanor = new Set(egnaSteg.flatMap((s) => [s.fran, s.till]).filter(Boolean));
     for (const b of banor.values()) {
@@ -306,6 +427,9 @@ export function composeScenarios(ctx) {
       if (s.till) ut.push(`${p}.operation.receiver = "${s.till}"`);
       const nyckel = instansNyckel(s);
       if (nyckel) ut.push(`${p}.operation.${s.riktning === 'hamtar' ? 'response' : 'request'}.instanceReference = "${nyckel}"`);
+      const stegP = p.replace(/\.operation$/, '');
+      if (s.specifikation && ctx.capabilities.has(s.specifikation)) ut.push(`${stegP}.extension[$specifikation].valueCanonical = Canonical(${s.specifikation})`);
+      if (s.bindning) ut.push(`${stegP}.extension[$bindning].valueCode = #${s.bindning}`);
       return ut;
     };
     rader.push('* process[0].title = "Huvudscenario"');
@@ -327,6 +451,7 @@ export function composeScenarios(ctx) {
       }
     }
     genererat.push({ text: rader.filter(Boolean).join('\n'), namn: skiss.namn });
+    }
 
     // Requirements per deltagande bana (inte personer): en sats per steg.
     const satser = new Map();
@@ -348,8 +473,8 @@ export function composeScenarios(ctx) {
       ].filter((x) => x && !x.endsWith('/undefined'));
       if (s.kravtext && fran) {
         lagg(s.fran, { nyckel, label: s.titel, styrka: s.styrka, krav: s.kravtext, satisfiedBy: satisfiedBy(fran), steg: s.nr });
-      } else if (s.operation && fran && till && fran !== till) {
-        const [inf, pres] = VERB[s.operation] || ['anropa', 'anropar'];
+      } else if ((s.operation || AKTIVITETER[s.aktivitet]?.ops.length) && fran && till && fran !== till) {
+        const [inf, pres] = AKTIVITETER[s.aktivitet]?.verb || VERB[s.operation] || ['anropa', 'anropar'];
         if (fran.typ === 'system') lagg(s.fran, { nyckel, label: s.titel, styrka: s.styrka, krav: `${fran.titel} SKA kunna ${inf} ${vad} hos ${till.titel}.`.replace('  ', ' '), satisfiedBy: satisfiedBy(fran), steg: s.nr });
         if (till.typ === 'system') lagg(s.till, { nyckel, label: s.titel, styrka: s.styrka, krav: `${till.titel} SKA stödja att ${fran.titel} ${pres} ${vad}.`.replace('  ', ' '), satisfiedBy: satisfiedBy(till), steg: s.nr });
       }
@@ -372,7 +497,7 @@ export function composeScenarios(ctx) {
           `* name = "${namn}"`,
           `* title = "Krav: ${fshStr(skiss.titel)} – ${fshStr(b.titel)}"`,
           '* status = #draft',
-          `* reference[0] = "${url('ExampleScenario', skiss.namn)}"`,
+          `* reference[0] = "${url(flodesTyp, skiss.namn)}"`,
           ...b.roller.filter((x) => ctx.actors.has(x)).map((x) => `* actor[+] = Canonical(${x})`),
         ];
         for (const s of lista) {
@@ -390,6 +515,9 @@ export function composeScenarios(ctx) {
     modell.push({
       namn: k.skiss.namn,
       typ: k.skiss.anvandningsfall ? 'anvandningsfall' : 'delflode',
+      niva: igNiva,
+      resurs: flodesTyp,
+      tillampar: k.tillampar || null,
       forutsattning: !!k.skiss.forutsattning,
       endastInkluderad: !!k.endastInkluderad,
       nyckel: k.skiss.nyckel,
@@ -407,11 +535,73 @@ export function composeScenarios(ctx) {
     });
   }
   return { genererat, modell };
+
+  // Logiskt arbetsflöde som PlanDefinition (workflow-definition): aktörer med
+  // roller, en åtgärd per steg med aktivitet, deltagare och information, i
+  // ordning; inkluderade flöden och delflöden som definitionCanonical.
+  function planDefinition(k) {
+    const { skiss, banor, steg } = k;
+    const topp = steg.filter((x) => !x.nr.includes('.'));
+    const anvanda = new Set(allaSteg(topp).flatMap((x) => [x.fran, x.till]).filter(Boolean));
+    const r = [
+      `Instance: ${skiss.namn}`,
+      'InstanceOf: PlanDefinition',
+      'Usage: #definition',
+      `Title: "${fshStr(skiss.titel)}"`,
+      `Description: "Logiskt ${skiss.anvandningsfall ? 'arbetsflöde för användningsfallet' : 'delflöde'} ${fshStr(skiss.titel)}, kompilerat av ig-composer från ${skiss.paket}/${skiss.fil}."`,
+      `* name = "${skiss.namn}"`,
+      `* title = "${fshStr(skiss.titel)}"`,
+      '* status = #draft',
+      '* type = $plan-definition-type#workflow-definition',
+      skiss.syfte ? `* purpose = "${fshStr(skiss.syfte)}"` : null,
+    ];
+    for (const b of banor.values()) {
+      if (!anvanda.has(b.nyckel)) continue;
+      r.push(`* actor[+].id = "${b.nyckel}"`, `* actor[=].title = "${fshStr(b.titel)}"`,
+        `* actor[=].option[+].type = $action-participant-type#${b.typ === 'person' ? 'practitioner' : 'device'}`);
+      for (const roll of b.roller) if (ctx.actors.has(roll)) r.push(`* actor[=].extension[$scenario-aktor][+].valueCanonical = Canonical(${roll})`);
+    }
+    const atgard = (s, p) => {
+      // id (för relatedAction.targetId, pld-4) och linkId följer stegnumret.
+      const id = `steg-${s.nr.replace(/[^A-Za-z0-9.-]/g, '-')}`;
+      const ut = [`${p}.id = "${id}"`, `${p}.linkId = "${s.nr}"`, `${p}.title = "${fshStr(s.titel)}"`];
+      if (s.typ === 'delflode' || s.typ === 'inkludering') {
+        ut.push(`${p}.definitionCanonical = Canonical(${s.delflode || s.inkluderad})`);
+        return ut;
+      }
+      if (s.kravtext) ut.push(`${p}.description = "${fshStr(s.kravtext)}"`);
+      if (s.aktivitet) ut.push(`${p}.code = $aktivitet#${s.aktivitet}`);
+      if (s.fran) ut.push(`${p}.participant[+].actorId = "${s.fran}"`, `${p}.participant[=].function = $action-participant-function#performer`);
+      if (s.till && s.till !== s.fran) ut.push(`${p}.participant[+].actorId = "${s.till}"`, `${p}.participant[=].role.text = "mottagare"`);
+      const i = s.informationsbehov;
+      if (i) {
+        const sida = s.riktning === 'hamtar' ? 'output' : 'input';
+        ut.push(`${p}.${sida}[+].title = "${fshStr(i.titel)}"`, `${p}.${sida}[=].requirement.type = #${i.typ || 'Base'}`,
+          `${p}.${sida}[=].requirement.profile[+] = Canonical(${i.lm})`);
+      }
+      return ut;
+    };
+    let forra = null;
+    for (const s of topp) {
+      r.push(...atgard(s, '* action[+]').map((x, i) => (i === 0 ? x : x.replace('action[+]', 'action[=]'))));
+      if (forra) r.push(`* action[=].relatedAction[+].targetId = "steg-${forra.replace(/[^A-Za-z0-9.-]/g, '-')}"`, '* action[=].relatedAction[=].relationship = #after');
+      forra = s.nr;
+      if (s.alternativ?.length) {
+        r.push('* action[=].selectionBehavior = #at-most-one');
+        for (const a of s.alternativ) {
+          r.push(`* action[=].action[+].title = "Alternativ: ${fshStr(a.titel)}"`, '* action[=].action[=].groupingBehavior = #logical-group');
+          for (const as of a.steg) r.push(...atgard(as, '* action[=].action[=].action[+]').map((x, i) => (i === 0 ? x : x.replace('action[+]', 'action[=]'))));
+        }
+      }
+    }
+    return r.filter(Boolean).join('\n');
+  }
 }
 
 function stegUt(s) {
   return {
     nr: s.nr, typ: s.typ, titel: s.titel, fran: s.fran || null, till: s.till || null, operation: s.operation || null,
+    aktivitet: s.aktivitet || null, id: s.id || null, kalla: s.kalla || null, bindning: s.bindning || null, specifikation: s.specifikation || null,
     informationsbehov: s.informationsbehov?.nyckel || null, modell: s.informationsbehov?.lm || null, profil: s.informationsbehov?.profil?.name || null,
     resurstyp: s.resurstyp || null, delflode: s.delflode || null, invavd: s.invavd || null, inkluderad: s.inkluderad || null,
     krav: s.kravtext || null, tackning: s.tackning || null,

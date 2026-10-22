@@ -17,8 +17,9 @@ steg:
     roller:
       registrerare: kalla
       katalog: katalog
-  - titel: Invånartjänsten hämtar källsystemets CapabilityStatement
+  - id: formagor
+    titel: Invånartjänsten tar reda på vad källsystemet stödjer
     fran: invanartjanst
     till: kalla
-    operation: capabilities
+    aktivitet: kontrollera
     krav: Källsystemet SKA exponera ett CapabilityStatement (kind=instance) som anger vilka tjänster och profiler det stödjer.

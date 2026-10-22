@@ -11,4 +11,5 @@ steg:
   - titel: Invånartjänsten filtrerar bort information märkt NOPAT
     fran: konsument
     till: konsument
+    aktivitet: utfora
     krav: Invånartjänsten SKA filtrera bort information märkt med säkerhetsetiketten NOPAT innan den visas.

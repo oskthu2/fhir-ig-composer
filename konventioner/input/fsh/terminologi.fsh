@@ -55,3 +55,46 @@ Title: "Inkludering"
 Description: "Tillåtna värden för inkludering och kompositionsanvisning."
 * ^status = #draft
 * include codes from system Inkludering
+
+// Arbetsflöden: aktiviteter i de logiska flödena (byggblock, federationer).
+// En tjänst binder varje aktivitet till en interaktion i förmågorna.
+CodeSystem: Aktivitet
+Id: aktivitet
+Title: "Aktivitet"
+Description: "Aktivitetstyper i logiska arbetsflöden (PlanDefinition, workflow-definition). Oberoende av FHIR-interaktioner; tillämpningen i en tjänst binder dem."
+* ^status = #draft
+* ^caseSensitive = true
+* ^content = #complete
+* #hamta "Hämta" "Utföraren hämtar information från mottagaren."
+* #lamna "Lämna" "Utföraren lämnar information till mottagaren."
+* #registrera "Registrera" "Utföraren registrerar något hos mottagaren, t.ex. en anslutning eller ett engagemang."
+* #uppdatera "Uppdatera" "Utföraren uppdaterar något den tidigare registrerat hos mottagaren."
+* #kontrollera "Kontrollera" "Utföraren kontrollerar något mot mottagaren, t.ex. en patientrelation eller ett medlemskap."
+* #meddela "Meddela" "Utföraren meddelar mottagaren att något har hänt."
+* #visa "Visa" "Utföraren visar information för en person."
+* #utfora "Utföra" "Utföraren gör något själv, utan någon annan part."
+
+ValueSet: AktivitetVS
+Id: aktivitet
+Title: "Aktivitet"
+Description: "Aktivitetstyper i logiska arbetsflöden."
+* ^status = #draft
+* include codes from system Aktivitet
+
+CodeSystem: Bindning
+Id: bindning
+Title: "Bindning"
+Description: "Hur en aktivitet bands till en interaktion i ett tillämpat flöde."
+* ^status = #draft
+* ^caseSensitive = true
+* ^content = #complete
+* #harledd "Härledd" "Härledd ur aktiviteten, informationen och mottagarens förmågor."
+* #tillampning "Tillämpning" "Angiven i tjänstens tillämpning (input/tillampning.yaml)."
+* #flode "Flöde" "Angiven i ett tillämpat flöde, t.ex. i en stödtjänst."
+
+ValueSet: BindningVS
+Id: bindning
+Title: "Bindning"
+Description: "Hur en aktivitet bands till en interaktion."
+* ^status = #draft
+* include codes from system Bindning

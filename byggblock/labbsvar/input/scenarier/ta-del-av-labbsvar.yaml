@@ -18,7 +18,6 @@ steg:
   - titel: Appen söker patientens labbsvar
     fran: app
     till: kalla
-    operation: search-type
     hamtar: labbsvar
   - titel: Appen visar labbsvaren med referensintervall
     fran: app

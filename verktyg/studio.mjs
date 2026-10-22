@@ -9,6 +9,7 @@
 //   PUT  /api/skiss                { fil, doc }   användningsfall eller delflöde
 //   POST /api/yaml                 { doc } → { text }  förhandsgranskning
 //   PUT  /api/komposition/<ig-id>  { komponerar, anvandningsfall, valfria, forutsattningar, flodesmonster }
+//   PUT  /api/tillampning/<ig-id>  { flode, steg, operation, resurstyp, ta_bort }  bindning i tjänsten
 //   POST /api/aterstall            { fil }        git checkout av en fil
 //   POST /api/bygg                                hela bygget med SUSHI
 
@@ -156,6 +157,28 @@ export function skrivSkiss(root, fil, doc) {
   return fil;
 }
 
+// Tjänstens tillämpning (input/tillampning.yaml): överstyr bindningen av en
+// aktivitet till en interaktion.
+export function skrivTillampning(ws, igId, b, root) {
+  const ig = ws.get(igId);
+  if (!ig || ig.roll !== 'tjanst') throw new Error(`${igId} är ingen tjänst`);
+  if (!b.flode || !b.steg) throw new Error('Ange flode och steg');
+  const fil = path.join(ig.dir, 'input', 'tillampning.yaml');
+  const doc = fs.existsSync(fil) ? YAML.parseDocument(fs.readFileSync(fil, 'utf8')) : new YAML.Document({});
+  if (!doc.contents) doc.contents = doc.createNode({});
+  if (!fs.existsSync(fil)) doc.commentBefore = ' Tillämpning: bindningar av aktiviteter i de logiska flödena till interaktioner,\n där den härledda bindningen inte räcker. <flöde>: { <steg-id eller nr>: { operation, resurstyp } }';
+  if (b.ta_bort) {
+    doc.deleteIn([b.flode, String(b.steg)]);
+    if (doc.getIn([b.flode])?.items?.length === 0) doc.delete(b.flode);
+  } else {
+    doc.setIn([b.flode, String(b.steg)], { operation: b.operation || null, ...(b.resurstyp !== undefined ? { resurstyp: b.resurstyp } : {}) });
+  }
+  // Utan bindningar kvar behövs ingen fil.
+  if (!doc.contents?.items?.length) fs.rmSync(fil, { force: true });
+  else fs.writeFileSync(fil, doc.toString({ lineWidth: 0 }));
+  return path.relative(root, fil);
+}
+
 // ---- server
 
 export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', verktyg }) {
@@ -202,6 +225,9 @@ export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', verk
       }
       if (req.method === 'PUT' && u.pathname.startsWith('/api/komposition/')) {
         return json(res, 200, efter(skrivKomposition(loadWorkspace(root), decodeURIComponent(u.pathname.slice(17)), await kropp(req), root)));
+      }
+      if (req.method === 'PUT' && u.pathname.startsWith('/api/tillampning/')) {
+        return json(res, 200, efter(skrivTillampning(loadWorkspace(root), decodeURIComponent(u.pathname.slice(17)), await kropp(req), root)));
       }
       if (req.method === 'POST' && u.pathname === '/api/aterstall') {
         const { fil } = await kropp(req);

@@ -35,7 +35,7 @@ import {
 
 const DEFINITIONER = new Set([
   'StructureDefinition', 'ValueSet', 'CodeSystem', 'CapabilityStatement', 'ActorDefinition', 'Requirements',
-  'ExampleScenario', 'ImplementationGuide', 'SearchParameter', 'OperationDefinition', 'ConceptMap',
+  'ExampleScenario', 'PlanDefinition', 'ActivityDefinition', 'ImplementationGuide', 'SearchParameter', 'OperationDefinition', 'ConceptMap',
 ]);
 const RESURS_OPS = new Set(['read', 'search-type', 'create', 'update']);
 const SYSTEM_OPS = new Set(['search-system']);

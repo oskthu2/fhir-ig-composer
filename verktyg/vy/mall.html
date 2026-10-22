@@ -319,6 +319,8 @@ const el = (tag, attrs = {}, ...barn) => {
   return e;
 };
 const rörelse = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+const AKTIVITET = { hamta: 'hämta', kontrollera: 'kontrollera', lamna: 'lämna', registrera: 'registrera', uppdatera: 'uppdatera', meddela: 'meddela', visa: 'visa', utfora: 'utföra' };
+const BINDNING = { harledd: 'härledd ur förmågorna', tillampning: 'tjänstens tillämpning', flode: 'tillämpat flöde' };
 const ROLL = { byggblock: 'Byggblock', federation: 'Federation', stodtjanst: 'Stödtjänst', tjanst: 'Tjänst', konvention: 'Konvention' };
 // System i systemregistret (testade mot den mockade federationen) och system
 // härledda ur en verklig T2-realisering (läsadaptern), med sin körning.
@@ -510,6 +512,7 @@ function ritaIg(p, id) {
   const ucs = m.anvandningsfall || [];
   flikar(p, [
     ucs.length && { id: 'uc', titel: 'Användningsfall', antal: ucs.filter((u) => u.typ === 'anvandningsfall').length, rita: (c) => ritaAnvandningsfall(c, m) },
+    ig(id).roll === 'tjanst' && ucs.length && { id: 'till', titel: 'Tillämpning', antal: tillampadeSteg(m).length, rita: (c) => ritaTillampning(c, m) },
     m.kravprofiler.length && { id: 'krav', titel: 'Kravprofiler', antal: m.kravprofiler.length, rita: (c) => ritaKrav(c, m) },
     { id: 'art', titel: 'Vad kommer med var', antal: allaArt.length, rita: (c) => ritaArtefakter(c, allaArt) },
     { id: 'prof', titel: 'Exponerade profiler', antal: m.exponerade.length, rita: (c) => ritaProfiler(c, m) },
@@ -609,9 +612,12 @@ function ritaAnvandningsfall(c, m) {
   const mermaid = DATA.mermaid?.[m.ig.id]?.[u.namn];
   c.append(
     el('p', {}, u.syfte || ''),
+    el('div', { class: 'etiketter' },
+      el('span', { class: 'etikett' }, u.niva === 'logisk' ? 'Logiskt arbetsflöde · PlanDefinition' : 'Tillämpat flöde · ExampleScenario'),
+      u.tillampar ? el('span', { class: 'etikett mono', title: u.tillampar }, `tillämpar ${u.tillampar.split('/').pop()}`) : null),
     el('p', { class: 'svag liten' }, `${u.typ === 'delflode' ? 'Delflöde' : 'Användningsfall'} `, artLänk(m.ig.id, u.namn), ` · skiss: `, el('code', {}, `${u.fil}`), ` i `, kort(u.paket),
       skiss ? el('button', { class: 'knapp', style: 'margin-left:10px', onclick: () => redigera({ typ: 'skiss', ig: skiss.ig, fil: skiss.fil, doc: structuredClone(skiss.doc), tillbaka: { ...state } }) }, 'Redigera skissen') : null),
-    mermaid ? el('details', {}, el('summary', { class: 'svag liten' }, 'Mermaid (ur ExampleScenario, samma som på IG:ns sida Användningsfall)'),
+    mermaid ? el('details', {}, el('summary', { class: 'svag liten' }, u.niva === 'logisk' ? 'Mermaid: simbanor ur PlanDefinition, samma som på IG:ns sida Arbetsflöden' : 'Mermaid: sekvens ur ExampleScenario, samma som på IG:ns sida Användningsfall'),
       el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: (e) => {
         const knapp = e.target;
         const markera = () => { const r = document.createRange(); r.selectNodeContents(knapp.closest('details').querySelector('pre')); getSelection().removeAllRanges(); getSelection().addRange(r); knapp.textContent = 'Markerad – kopiera med Ctrl+C'; };
@@ -647,8 +653,9 @@ function ritaAnvandningsfall(c, m) {
     const r = ++radNr;
     grid.append(el('div', { class: `steg${invävd}${extra}`, style: `grid-row: ${r}; grid-column: 1` },
       el('span', { class: 'nr' }, st.nr), st.titel,
-      st.operation || st.profil || st.resurstyp ? el('span', { class: 'op' },
-        [st.operation, st.profil || st.resurstyp].filter(Boolean).join(' · '),
+      st.aktivitet || st.operation || st.profil || st.resurstyp ? el('span', { class: 'op' },
+        [st.aktivitet ? `${AKTIVITET[st.aktivitet] || st.aktivitet}${st.operation ? ' →' : ''}` : null, st.operation, st.profil || st.resurstyp,
+          st.specifikation ? `enligt ${st.specifikation}` : null].filter(Boolean).join(' · '),
         tack.fran !== undefined || tack.till !== undefined ? el('span', {}, '  förmåga ', märke(tack.fran), märke(tack.till)) : null) : null,
       st.krav ? el('span', { class: 'op' }, `krav: ${st.krav}`) : null,
     ));
@@ -673,7 +680,7 @@ function ritaAnvandningsfall(c, m) {
       for (const as of alt.steg) rad(as, ' alt');
     }
   }
-  c.append(el('h3', {}, 'Scenario'), el('div', { class: 'sekvensram' }, grid));
+  c.append(el('h3', {}, u.niva === 'logisk' ? 'Arbetsflöde' : 'Scenario'), el('div', { class: 'sekvensram' }, grid));
 
   // Spårbarhet: krav per aktör → steg → informationsbehov → uppfylls av
   const perId = new Map(m.artefakter.map((a) => [a.id, a]));
@@ -709,11 +716,64 @@ function ritaAnvandningsfall(c, m) {
   c.append(el('h3', {}, 'Täckning'), el('ul', {},
     el('li', {}, info.every((i) => i.profil) ? el('span', { class: 'ok' }, '✓ ') : el('span', { class: 'nej' }, '✕ '),
       `Informationsbehov: ${info.map((i) => `${i.titel} → ${i.profil || 'ingen profil'}`).join(', ') || 'inga'}`),
-    el('li', {}, brister.length ? el('span', { class: 'nej' }, '✕ ') : el('span', { class: 'ok' }, '✓ '),
-      brister.length ? `Förmåga saknas i steg ${brister.map((b) => b.nr).join(', ')}` : `${ops.length} operationer: avsändare och mottagare har förmågan`),
+    u.niva === 'logisk' ? el('li', {}, el('span', { class: 'svag' }, '· '), 'Logiskt flöde: förmågorna prövas när en tjänst tillämpar flödet') : el('li', {}, brister.length ? el('span', { class: 'nej' }, '✕ ') : el('span', { class: 'ok' }, '✓ '),
+      brister.length ? `Förmåga saknas i steg ${brister.map((b) => b.nr).join(', ')}` : `${ops.length} interaktioner: avsändare och mottagare har förmågan`),
     ig(m.ig.id).roll === 'tjanst' ? el('li', {}, ospelade.length ? el('span', { class: 'nej' }, '✕ ') : el('span', { class: 'ok' }, '✓ '),
       ospelade.length ? `Ingen tjänsteaktör spelar ${ospelade.map((b) => b.titel).join(', ')}` : 'Alla systemaktörer spelas av en tjänsteaktör eller är stödtjänster') : null,
   ));
+}
+
+// ------------------------------------------------------------------ tillämpning
+// Varje aktivitet i tjänstens flöden och hur den bands: interaktion, resurstyp,
+// specifikation (tjänstens API per informationsmängd eller stödtjänstens) och
+// varifrån bindningen kommer. Varje steg står en gång, i sitt källflöde.
+function tillampadeSteg(m) {
+  const ut = new Map();
+  const samla = (lista) => {
+    for (const st of lista) {
+      if (st.typ === 'operation' && st.kalla && (st.operation || (st.aktivitet && !['visa', 'utfora'].includes(st.aktivitet)))) {
+        const nyckel = `${st.kalla.flode}|${st.id || st.kalla.nr}`;
+        if (!ut.has(nyckel)) ut.set(nyckel, st);
+      }
+      samla((st.alternativ || []).flatMap((a) => a.steg));
+    }
+  };
+  for (const u of m.anvandningsfall) samla(u.steg);
+  return [...ut.values()];
+}
+function ritaTillampning(c, m) {
+  const steg = tillampadeSteg(m);
+  const flöden = [...new Set(steg.map((s) => s.kalla.flode))];
+  const titel = (n) => m.anvandningsfall.find((u) => u.namn === n)?.titel || n;
+  const överstyrd = (s) => s.bindning === 'tillampning';
+  c.append(el('p', { class: 'svag' }, 'De logiska flödena anger aktiviteter. Tjänsten binder varje aktivitet till en interaktion i mottagarens förmågor och till den specifikation den följer: tjänstens API för informationsmängden, eller stödtjänstens API (t.ex. tjänstekatalogens). Bindningen härleds; där den inte räcker anges den i tjänstens ', el('code', {}, 'input/tillampning.yaml'), '.'));
+  for (const f of flöden) {
+    c.append(el('h3', {}, titel(f)), el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Steg', 'Aktivitet', 'Interaktion', 'Specifikation', 'Bindning'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, steg.filter((s) => s.kalla.flode === f).map((s) => el('tr', {},
+        el('td', {}, el('span', { class: 'mono svag' }, s.id || s.kalla.nr), ' ', s.titel),
+        el('td', {}, AKTIVITET[s.aktivitet] || s.aktivitet || '–', s.informationsbehov ? el('div', { class: 'via' }, s.modell || s.informationsbehov) : null),
+        el('td', { class: 'mono liten' }, s.operation ? [s.operation, s.profil || s.resurstyp].filter(Boolean).join(' ') : el('span', { class: 'nej' }, 'obunden')),
+        el('td', {}, s.specifikation ? artLänk(m.ig.id, s.specifikation) : '–'),
+        el('td', {}, el('span', { class: `status ${överstyrd(s) ? 'delvis' : s.operation ? 'ok' : 'saknas'}` }, BINDNING[s.bindning] || 'saknas'),
+          STUDIO ? tillampningsVal(m, s) : null),
+      ))),
+    )));
+  }
+}
+function tillampningsVal(m, s) {
+  const ops = ['read', 'search-type', 'search-system', 'create', 'update', 'capabilities'];
+  const överstyrd = s.bindning === 'tillampning';
+  return el('div', { class: 'via', style: 'margin-top:4px' }, el('label', {}, 'Bind till ',
+    el('select', { class: 'falt', style: 'width:auto;display:inline-block', onchange: (e) => {
+      const v = e.target.value;
+      if (!v && !överstyrd) return;
+      const typlös = v === 'search-system' || v === 'capabilities';
+      spara(e.target, 'PUT', `/api/tillampning/${encodeURIComponent(m.ig.id)}`, v
+        ? { flode: s.kalla.flode, steg: s.id || s.kalla.nr, operation: v, resurstyp: typlös ? null : s.resurstyp || null }
+        : { flode: s.kalla.flode, steg: s.id || s.kalla.nr, ta_bort: true }, { vy: 'tjanst', id: m.ig.id, flik: 'till' });
+    } }, el('option', { value: '', selected: !överstyrd }, överstyrd ? 'härled igen' : '– som härlett –'),
+    ...ops.map((o) => el('option', { value: o, selected: överstyrd && o === s.operation }, o)))));
 }
 
 // ------------------------------------------------------------------ system
@@ -1358,9 +1418,13 @@ function ritaSkissRedigering(p, r) {
   const info = Object.keys(d.informationsbehov || {});
   const om = () => ritaPanel();
   const roll = (v) => (typeof v === 'object' ? v.roll : v);
+  const logisk = ['byggblock', 'federation'].includes(ig(r.ig).roll);
 
   p.append(el('div', { class: 'panelhuvud' }, el('h2', {}, r.ny ? `Nytt ${typ === 'delflode' ? 'delflöde' : 'användningsfall'} i ${kort(r.ig)}` : `Redigera ${d.titel || d[typ]}`),
-    el('span', { class: 'mono svag' }, r.fil || `${ig(r.ig).katalog}/input/scenarier/…`)));
+    el('span', { class: 'mono svag' }, r.fil || `${ig(r.ig).katalog}/input/scenarier/…`)),
+    el('p', { class: 'svag liten' }, logisk
+      ? 'Logiskt arbetsflöde: ange aktivitet, roller och information. Tjänsterna binder aktiviteterna till interaktioner (fliken Tillämpning).'
+      : 'Tillämpat flöde: ange interaktion och resurstyp för stegen.'));
   p.append(el('div', { class: 'formular' },
     el('label', {}, typ === 'delflode' ? 'Delflöde (namn)' : 'Användningsfall (namn)'), r.ny ? falt({ placeholder: 'T.ex. HamtaRemiss' }, d[typ], (v) => { d[typ] = v; }) : el('span', { class: 'mono' }, d[typ]),
     el('label', {}, 'Nyckel'), falt({ placeholder: 'Prefix för kravnycklar, t.ex. REM' }, d.nyckel, (v) => { d.nyckel = v; }),
@@ -1398,15 +1462,20 @@ function ritaSkissRedigering(p, r) {
           val([['', '– ingen –'], ...nycklar], s.roller[k], (v) => { if (v) s.roller[k] = v; else delete s.roller[k]; }), el('span'))) : null));
       return;
     }
-    const hamtar = s.hamtar !== undefined || (typ === 'anvandningsfall' && info.length && s.operation && ['read', 'search-type'].includes(s.operation));
+    // Logiska flöden anger aktivitet och information; tillämpade även interaktion.
+    if (s.hamtar !== undefined) { s.aktivitet ||= 'hamta'; s.information = s.hamtar; delete s.hamtar; }
+    if (s.skickar !== undefined) { s.aktivitet ||= 'lamna'; s.information = s.skickar; delete s.skickar; }
     p.append(el('div', { class: 'stegkort' },
       el('div', { class: 'stegrad' }, el('span', { class: 'nr' }, i + 1),
         falt({ placeholder: 'Vad händer' }, s.titel, (v) => { s.titel = v; }),
-        val([['', 'från …'], ...nycklar], s.fran, (v) => { s.fran = v; }),
-        val([['', 'till …'], ...nycklar], s.till, (v) => { s.till = v; }),
-        val(OPERATIONER.map((o) => [o, o || 'ingen operation']), s.operation, (v) => { if (v) s.operation = v; else delete s.operation; om(); }),
-        hamtar ? val([['', 'hämtar …'], ...info], s.hamtar, (v) => { if (v) { s.hamtar = v; delete s.resurstyp; } else delete s.hamtar; })
-          : falt({ placeholder: 'resurstyp' }, s.resurstyp, (v) => { if (v) s.resurstyp = v; else delete s.resurstyp; }),
+        val([['', 'utförs av …'], ...nycklar], s.fran, (v) => { s.fran = v; }),
+        val([['', 'mot …'], ...nycklar], s.till, (v) => { s.till = v; }),
+        val([['', 'aktivitet …'], ...Object.entries(AKTIVITET)], s.aktivitet, (v) => { if (v) s.aktivitet = v; else delete s.aktivitet; }),
+        logisk
+          ? val([['', 'information …'], ...info], s.information, (v) => { if (v) s.information = v; else delete s.information; })
+          : el('span', { style: 'display:flex;gap:4px' },
+            val(OPERATIONER.map((o) => [o, o || 'interaktion …']), s.operation, (v) => { if (v) s.operation = v; else delete s.operation; }),
+            falt({ placeholder: 'resurstyp' }, s.resurstyp, (v) => { if (v) s.resurstyp = v; else delete s.resurstyp; })),
         verktyg),
       el('div', { class: 'paret', style: 'grid-template-columns: 1fr minmax(160px, 260px)' },
         el('textarea', { class: 'falt', placeholder: 'Krav på steget (SKA …)', oninput: (e) => { if (e.target.value) s.krav = e.target.value; else delete s.krav; } }, s.krav || ''),
@@ -1427,9 +1496,20 @@ function ritaSkissRedigering(p, r) {
       if (!k) return;
       for (const [n, a] of Object.entries(k.doc.aktorer || {})) if (!(n in d.aktorer)) d.aktorer[n] = structuredClone(a);
       // Bara de informationsbehov som de hämtade stegen använder.
-      const används = new Set(JSON.stringify(k.doc.steg).match(/"hamtar":"[^"]+"/g)?.map((x) => x.slice(10, -1)) || []);
+      const används = new Set(JSON.stringify(k.doc.steg).match(/"(hamtar|skickar|information)":"[^"]+"/g)?.map((x) => x.split('":"')[1].slice(0, -1)) || []);
       if (typ === 'anvandningsfall') for (const [n, a] of Object.entries(k.doc.informationsbehov || {})) if (används.has(n) && !((d.informationsbehov ||= {})[n])) d.informationsbehov[n] = a;
-      d.steg.push(...structuredClone(k.doc.steg));
+      const nya = structuredClone(k.doc.steg);
+      // In i ett logiskt flöde följer bara aktiviteten med, inte interaktionen.
+      if (logisk) {
+        const AV_OP = { 'search-type': 'hamta', read: 'hamta', 'search-system': 'hamta', create: 'registrera', update: 'uppdatera', capabilities: 'kontrollera', token: 'hamta' };
+        const rensa = (lista) => lista.forEach((x) => {
+          if (x.operation) x.aktivitet ||= AV_OP[x.operation];
+          delete x.operation; delete x.resurstyp;
+          (x.alternativ || []).forEach((a) => rensa(a.steg || []));
+        });
+        rensa(nya);
+      }
+      d.steg.push(...nya);
       om();
     }, { style: 'max-width:420px' }),
   ));
@@ -1478,7 +1558,7 @@ function ritaKompositionRedigering(p, r) {
     p.append(el('h3', {}, 'Förutsättningar (ingår i varje tjänst i federationen)'), kryss(fall, k.forutsattningar, titel),
       el('h3', {}, 'Flödesmönster'),
       el('div', { class: 'formular' },
-        el('label', {}, 'Vävs in vid'), kryss(['read', 'search-type', 'search-system', 'create', 'update'], f.vid),
+        el('label', {}, 'Vävs in vid aktiviteten'), kryss(['hamta', 'kontrollera', 'lamna', 'registrera', 'uppdatera', 'meddela'], f.vid, (a) => AKTIVITET[a]),
         el('label', {}, 'Före första'), kryss(delflöden, f.fore, titel),
         el('label', {}, ''), el('label', {}, el('input', { type: 'checkbox', checked: f.foreEnGang, onchange: (e) => { f.foreEnGang = e.target.checked; } }), ' bara en gång per användningsfall'),
         el('label', {}, 'Före varje'), kryss(delflöden, f.foreVarje, titel),

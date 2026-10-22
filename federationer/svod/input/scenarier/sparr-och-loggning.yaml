@@ -12,9 +12,9 @@ steg:
   - titel: Konsumenten filtrerar bort information som omfattas av spärr
     fran: konsument
     till: konsument
+    aktivitet: utfora
     krav: Konsumenten SKA tillämpa inre och yttre spärr utifrån resursens vårdenhet och vårdgivare innan informationen visas.
   - titel: Konsumenten loggar åtkomsten
     fran: konsument
     till: logg
-    operation: create
-    resurstyp: AuditEvent
+    aktivitet: lamna

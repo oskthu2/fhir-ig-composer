@@ -123,3 +123,79 @@ export function anvandningsfallSida(scenarier, resolver, { titel = 'Användnings
   }
   return ut.join('\n');
 }
+
+// ---------------------------------------------------------------- arbetsflöden
+
+const AKTIVITET_TEXT = {
+  hamta: 'hämtar', kontrollera: 'kontrollerar', lamna: 'lämnar', registrera: 'registrerar',
+  uppdatera: 'uppdaterar', meddela: 'meddelar', visa: 'visar', utfora: 'utför',
+};
+const etikett = (s) => text(s).replace(/"/g, "'");
+
+// Simbanediagram (flowchart) ur ett logiskt arbetsflöde (PlanDefinition,
+// workflow-definition): en bana per utförare, en nod per åtgärd i ordning,
+// information och mottagare på noden, delflöden som underprocesser och
+// alternativ som streckade grenar.
+export function mermaidFranPlan(pd, { resolver = () => null } = {}) {
+  const aktorer = new Map((pd.actor || []).map((a) => [a.id, a.title || a.id]));
+  const banor = new Map(); // aktör → [rader]
+  const fria = [];
+  const kanter = [];
+  const nod = (a, prefix = '') => `a_${`${prefix}${a.linkId || a.title}`.replace(/[^A-Za-z0-9]/g, '_')}`;
+  const utforare = (a) => (a.participant || []).find((p) => p.function?.coding?.some((c) => c.code === 'performer'))?.actorId;
+  const mottagare = (a) => (a.participant || []).find((p) => p.role?.text === 'mottagare')?.actorId;
+  const beskriv = (a, nr) => {
+    if (a.definitionCanonical) {
+      const sub = resolver(a.definitionCanonical);
+      return `${nr ? `${nr} ` : ''}${sub?.title || a.title || a.definitionCanonical.split('/').pop().split('|')[0]}`;
+    }
+    const akt = a.code?.coding?.[0]?.code;
+    const info = [...(a.output || []), ...(a.input || [])].map((x) => x.title).filter(Boolean);
+    const mot = mottagare(a);
+    const andra = [akt ? `${AKTIVITET_TEXT[akt] || akt}${info.length ? ` ${info.join(', ').toLowerCase()}` : ''}` : info.join(', '),
+      mot && mot !== utforare(a) ? `${akt === 'visa' ? 'för' : a.output?.length ? 'från' : akt ? 'hos' : 'mot'} ${aktorer.get(mot) || mot}` : ''].filter(Boolean).join(' ');
+    return `${nr ? `${nr} ` : ''}${etikett(a.title)}${andra ? `<br/><i>${etikett(andra)}</i>` : ''}`;
+  };
+  const placera = (a, id, nr) => {
+    const form = a.definitionCanonical ? `[["${beskriv(a, nr)}"]]` : `["${beskriv(a, nr)}"]`;
+    const u = utforare(a);
+    if (u && aktorer.has(u)) (banor.get(u) || banor.set(u, []).get(u)).push(`${id}${form}`);
+    else fria.push(`${id}${form}`);
+  };
+  let forra = 'start';
+  for (const a of pd.action || []) {
+    const id = nod(a);
+    placera(a, id, a.linkId);
+    kanter.push(`${forra} --> ${id}`);
+    forra = id;
+    for (const [g, grupp] of (a.action || []).entries()) {
+      let f = id;
+      for (const [i, b] of (grupp.action || []).entries()) {
+        const bid = nod(b, `${a.linkId}_alt${g + 1}_${i}_`);
+        placera(b, bid, null);
+        kanter.push(i === 0 ? `${f} -. "${etikett(grupp.title.replace(/^Alternativ: /, ''))}" .-> ${bid}` : `${f} -.-> ${bid}`);
+        f = bid;
+      }
+    }
+  }
+  kanter.push(`${forra} --> slut`);
+  const ut = ['flowchart LR', '  start((Start))', '  slut((Slut))'];
+  for (const [aktor, noder] of banor) {
+    ut.push(`  subgraph bana_${String(aktor).replace(/[^A-Za-z0-9]/g, '_')} ["${etikett(aktorer.get(aktor))}"]`, '    direction TB', ...noder.map((n) => `    ${n}`), '  end');
+  }
+  ut.push(...fria.map((n) => `  ${n}`), ...kanter.map((k) => `  ${k}`));
+  return ut.join('\n');
+}
+
+// Sida för ett logiskt paket: ett simbanediagram per arbetsflöde.
+export function arbetsflodesSida(planer, resolver, { titel = 'Arbetsflöden' } = {}) {
+  const ut = [`### ${titel}`, '',
+    'Logiska arbetsflöden: aktiviteter, roller och information, oberoende av FHIR-interaktioner. Diagrammen genereras av ig-composer ur IG:ns PlanDefinition-resurser (workflow-definition). En tjänst tillämpar flödena: den binder varje aktivitet till en interaktion i förmågorna och till tjänstens specifikation per informationsmängd.', ''];
+  for (const pd of planer) {
+    ut.push(`#### ${pd.title || pd.name}`, '');
+    if (pd.purpose) ut.push(pd.purpose, '');
+    const kod = mermaidFranPlan(pd, { resolver }).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    ut.push(`[PlanDefinition: ${pd.name}](PlanDefinition-${pd.id}.html)`, '', `<pre class="language-mermaid"><code class="language-mermaid">${kod}</code></pre>`, '');
+  }
+  return ut.join('\n');
+}

@@ -40,13 +40,24 @@ Kravmodellen följer kedjan i ISO/TR 19669: från kravspecifikation (användning
 | Aktör, person eller system | `ActorDefinition` | Byggblock och federationer |
 | Informationsbehov | Logisk modell (`Logical`) | Byggblock (i verkligheten från informationsunderlaget) |
 | Harmonisering | `* insert Realiserar(Informationsbehov)` på profilen | Byggblock och tjänster |
-| Användningsfall och delflöde | `ExampleScenario`, kompilerat från skissformatet | `input/scenarier/*.yaml` |
+| Logiskt arbetsflöde (användningsfall, delflöde) | `PlanDefinition` (`workflow-definition`), kompilerat från skissformatet | Byggblock och federationer, `input/scenarier/*.yaml` |
+| Tillämpat flöde | `ExampleScenario`, med `tillampar` till arbetsflödet och `specifikation` per steg | Tjänster och stödtjänster |
+| Tillämpning | Bindning av aktivitet till interaktion, härledd eller i `input/tillampning.yaml` | Tjänster |
 | Stödtjänst | `ActorDefinition` + förmågor i federationen | Federationer |
 | Invävning | Federationens extension `flodesmonster` | Federationer |
 | Urval | Extension `anvandningsfall` på tjänstens IG | Tjänster |
 | Krav per deltagande aktör | `Requirements`, en sats per steg, `satisfiedBy` till profil och förmåga | Genereras |
 
-Ett användningsfall skrivs i skissformatet, utan FSH:
+### Två nivåer: logiska arbetsflöden och tillämpning
+
+Flödena skissas som ren arbetsflödesmodellering, och tillämpas där det tekniska hör hemma:
+
+| Nivå | Var | Vad skissen anger | FHIR |
+|---|---|---|---|
+| **Logisk** (konceptuell och logisk) | Byggblock och federationer | Aktiviteter, roller, information, ordning och alternativ. Inga FHIR-interaktioner. | `PlanDefinition`, `type = workflow-definition`: `actor` med roller (`ActorDefinition`), `action` med aktivitet (`code`), utförare och mottagare (`participant`), information (`input`/`output` med den logiska modellen), ordning (`relatedAction`), alternativ och delflöden (`definitionCanonical`) |
+| **Tillämpad** | Tjänster, stödtjänsten (T2/tjänstekatalogen) | Varje aktivitet bunden till en interaktion och den specifikation den följer | `ExampleScenario` med `tillampar` → arbetsflödet, och per steg `specifikation` → `CapabilityStatement` (tjänstens API per informationsmängd eller stödtjänstens API) och `bindning` |
+
+Aktiviteterna är ett litet ordförråd (`konventioner`: CodeSystem `aktivitet`): *hämta, lämna, registrera, uppdatera, kontrollera, meddela, visa, utföra*. Ett logiskt flöde skrivs så här:
 
 ```yaml
 anvandningsfall: VardpersonalPatientoversikt
@@ -60,20 +71,47 @@ informationsbehov:
   vardkontakt: VardkontaktInfo      # logisk modell
 steg:
   - titel: Journalsystemet söker patientens vårdkontakter
-    fran: journal
-    till: kalla
-    operation: search-type
-    hamtar: vardkontakt
+    fran: journal                   # utförare
+    till: kalla                     # mottagare
+    hamtar: vardkontakt             # = aktivitet: hamta, information: vardkontakt
     alternativ:
       - titel: Källsystemet svarar inte
         steg: [ ... ]
+  - titel: Konsumenten loggar åtkomsten
+    fran: konsument
+    till: logg
+    aktivitet: lamna
 ```
 
-En federation väver in delflöden (också skrivna i skissformatet) före och efter steg med vissa operationer. SVOD väver in *Verifiera patientrelation* före första hämtningen och *Tillämpa spärr och logga åtkomst* efter varje hämtning. Ett delflödes aktör med `binder: fran` är samma deltagare som avsändaren i steget som delflödet vävs in vid. Aktören får då båda rollerna, till exempel PSKonsument + SVODKonsument, och tjänsten måste ha en tjänsteaktör som spelar båda.
+`operation` och `resurstyp` i ett logiskt flöde ger fel (`tillampningILogisktFlode`). Stödtjänsten T2 har tillämpade flöden: tjänstekatalogens, medlemskatalogens och engagemangsindexets interaktioner är själva specifikationen.
+
+**Tillämpningen** i en tjänst binder varje aktivitet till en interaktion i mottagarens förmågor:
+
+| Aktivitet | Interaktion (första som mottagaren har) |
+|---|---|
+| hämta, kontrollera | `search-type`, `read` på informationens resurstyp; utan information den enda resurstyp mottagaren har, annars `search-system` |
+| lämna, meddela | `create` |
+| registrera | `create`, `update` |
+| uppdatera | `update` |
+| visa, utföra | ingen |
+
+Specifikationen blir tjänstens API för informationsmängden (t.ex. `VardkontaktAPI`, som kan motsvara en extern specifikation), annars mottagarens förmåga (t.ex. `TjanstekatalogCS`). Där härledningen inte räcker anger tjänsten bindningen i `input/tillampning.yaml`, per källflöde och steg (`id` eller nummer):
+
+```yaml
+# 1177 Journal: federationens "ta reda på vad källsystemet stödjer" görs med capability discovery.
+AnslutaKallsystemIndividuell:
+  formagor:
+    operation: capabilities
+```
+
+En aktivitet som inte går att binda ger varningen `obundenAktivitet`. Fliken **Tillämpning** i en tjänst visar varje aktivitet med interaktion, specifikation och varifrån bindningen kommer, och i studion går den att överstyra.
+
+En federation väver in delflöden (också skrivna i skissformatet) före och efter steg med vissa aktiviteter (`flodesmonster`, `vid: hamta`). SVOD väver in *Verifiera patientrelation* före första hämtningen och *Tillämpa spärr och logga åtkomst* efter varje hämtning. Ett delflödes aktör med `binder: fran` är samma deltagare som avsändaren i steget som delflödet vävs in vid. Aktören får då båda rollerna, till exempel PSKonsument + SVODKonsument, och tjänsten måste ha en tjänsteaktör som spelar båda.
 
 `ig-composer` gör för varje IG:
 
-1. **Kompilerar** de valda användningsfallen och de delflöden som används till `ExampleScenario`. Invävda steg blir `step.workflow` med `invavd-av`.
+1. **Kompilerar** användningsfallen och de delflöden som används: i byggblock och federationer till `PlanDefinition`, i tjänster och stödtjänster till `ExampleScenario`. Invävda steg blir `step.workflow` med `invavd-av`.
+1. **Tillämpar** (i en tjänst): binder varje aktivitet till interaktion och specifikation, enligt tabellen ovan och tjänstens `input/tillampning.yaml`.
 2. **Harmoniserar** varje informationsbehov till den profil som realiserar det, helst en exponerad profil.
 3. **Binder** scenarioaktörer till roller och, i en tjänst, till den tjänsteaktör som spelar dem.
 4. **Genererar** `Requirements` per användningsfall och deltagande systemaktör: en sats per steg, med `satisfiedBy` till profilen och aktörens förmåga, och `reference` till scenariot. Kraven hamnar i kravprofilen för tjänsteaktörerna.
@@ -81,11 +119,12 @@ En federation väver in delflöden (också skrivna i skissformatet) före och ef
    - rollen finns som ActorDefinition;
    - informationsbehovet finns och har en profil;
    - en tjänsteaktör spelar varje systemaktör;
-   - avsändare och mottagare har interaktionen i sina förmågor.
+   - avsändare och mottagare har interaktionen i sina förmågor (i en tjänst);
+   - logiska flöden anger inga interaktioner, och tjänstens aktiviteter går att binda.
 
 I matrisvyn har varje tjänst och byggblock fliken **Användningsfall** med sekvensdiagram (invävda steg markerade), spårbarhet från kravsats till profil och förmåga, och täckning.
 
-Kedjan i FHIR: `ExampleScenario` → `Requirements` (per aktör) → `satisfiedBy` profil och `CapabilityStatement` → tjänsteaktör (`ActorDefinition.derivedFrom`) → i tjänstekatalogen `TKAPIInstance.instantiates` → ändpunkt.
+Kedjan i FHIR: `PlanDefinition` (logiskt) ← `ExampleScenario` (tillämpat, `tillampar`) → `Requirements` (per aktör) → `satisfiedBy` profil och `CapabilityStatement` → tjänsteaktör (`ActorDefinition.derivedFrom`) → i tjänstekatalogen `TKAPIInstance.instantiates` → ändpunkt.
 
 ## Förutsättningar och stödtjänster: T2-mönstret
 
@@ -123,7 +162,7 @@ steg:
     roller: { registrerare: kalla, katalog: katalog }
 ```
 
-Den inkluderade aktören binds till en aktör i det inkluderande fallet, som då spelar båda rollerna. I FHIR blir det `step.workflow`.
+Den inkluderade aktören binds till en aktör i det inkluderande fallet, som då spelar båda rollerna. I FHIR blir det `action.definitionCanonical` i arbetsflödet och `step.workflow` i det tillämpade scenariot.
 
 Förmågor läses och genereras per `rest`-block, alltså per läge. Ett källsystem är server för kliniskt innehåll men klient mot tjänstekatalogen och engagemangsindexet. Täckningskontrollen kräver interaktionen som klient hos avsändaren och som server hos mottagaren.
 
@@ -218,20 +257,23 @@ node verktyg/ig-composer.mjs studio            # http://127.0.0.1:4900/ (STUDIO_
 Studion är matrisvyn med redigering. Källan är fortsatt filerna i git: studion skriver dem, med kommentarer och ordning bevarade, komponerar om alla IG:ar utan SUSHI (någon sekund) och visar resultatet. Längst upp står ändrade filer med diff och *återställ*, kvittot från senaste sparningen (fel och varningar från kompositionen) och en knapp för hela bygget med SUSHI.
 
 - **System** (*Redigera systemet*, *＋ Nytt system*): titel, organisation med HSA-id, ändpunkter, roller per tjänst, tillval som hör till de valda rollerna och informationsmängder (obligatoriska låsta, valfria valbara, eller *som nuläget*). Efter sparning visas den nya summan av krav, gapet och testlistan direkt.
-- **Användningsfall och delflöden** (*Redigera skissen*, *＋ Nytt användningsfall*, *＋ Nytt delflöde*): aktörer väljs bland IG:ns `ActorDefinition`, informationsbehov bland de logiska modellerna, steg med från, till, operation och vad som hämtas. Krav kan hämtas ur kravkatalogen, användningsfall kan inkluderas, och steg kan hämtas från en annan skiss (aktörer och informationsbehov följer med). YAML går att förhandsgranska.
+- **Användningsfall och delflöden** (*Redigera skissen*, *＋ Nytt användningsfall*, *＋ Nytt delflöde*): aktörer väljs bland IG:ns `ActorDefinition`, informationsbehov bland de logiska modellerna, steg med utförare, mottagare, aktivitet och information. I tillämpade flöden (stödtjänster) även interaktion och resurstyp; steg som hämtas in i ett logiskt flöde behåller bara aktiviteten.
+- **Tillämpning** (fliken *Tillämpning* i en tjänst): bindningen per aktivitet, med *Bind till* för att överstyra den härledda; sparas i tjänstens `input/tillampning.yaml`. Krav kan hämtas ur kravkatalogen, användningsfall kan inkluderas, och steg kan hämtas från en annan skiss (aktörer och informationsbehov följer med). YAML går att förhandsgranska.
 - **Komposition** (*Redigera kompositionen*): vilka paket IG:n komponerar; för en tjänst vilka användningsfall den har och vilka informationsmängder som är valfria; för en federation förutsättningar och flödesmönster.
 
 Skrivningar kräver huvudet `X-Studio`, så att en annan webbsida inte kan skriva via studion. Studion lyssnar bara på 127.0.0.1 om inte `STUDIO_VARD` säger annat.
 
-## Flöden: ExampleScenario som styrande källa
+## Flöden: en styrande källa, två diagram
 
-Ett flöde skrivs en gång, i skissformatet (för hand eller i studion), och kompileras till FHIR: `ExampleScenario` för flödet och `Requirements` för kraven. Allt annat utgår från `ExampleScenario`:
+Ett flöde skrivs en gång i skissformatet (för hand eller i studion) och kompileras till FHIR. Allt annat utgår från de resurserna:
 
-- **IG:ns webbsidor:** efter SUSHI genererar `bygg` (och `efterbehandla`) sidan *Användningsfall* med ett sekvensdiagram per användningsfall. Sidan läggs in i ImplementationGuide-resursen och menyn. IG Publisherns mall renderar Mermaid. Invävda delflöden (`step.workflow`) expanderas och ramas in, och delflödets aktörer binds till huvudflödets aktörer med samma roll.
-- **Verktyget:** kravspårning, systemanalys och testkörning använder samma modell.
-- **Registret:** `ig-composer mermaid <kanonisk URL>` ritar diagrammet direkt ur ExampleScenario i definitionsregistret, och för en fil med `ig-composer mermaid <fil>`.
+- **IG:ns webbsidor:** efter SUSHI genererar `bygg` (och `efterbehandla`) en sida med ett diagram per flöde och lägger in den i ImplementationGuide-resursen och menyn. IG Publisherns mall renderar Mermaid.
+  - Byggblock och federationer får sidan *Arbetsflöden*: **simbanediagram** ur `PlanDefinition`, med en bana per utförare och en nod per aktivitet med information och mottagare. Delflöden visas som underprocesser och alternativ som streckade grenar.
+  - Tjänster och stödtjänster får sidan *Användningsfall*: **sekvensdiagram** ur `ExampleScenario` med interaktionerna. Invävda delflöden expanderas och ramas in, och delflödets aktörer binds till huvudflödets.
+- **Verktyget:** kravspårning, systemanalys, tillämpning och testkörning använder samma modell.
+- **Registret:** `ig-composer mermaid <kanonisk URL>` ritar diagrammet direkt ur definitionsregistret (`PlanDefinition` eller `ExampleScenario`), och för en fil med `ig-composer mermaid <fil>`.
 
-`ExampleScenario` är rätt FHIR-resurs för interaktioner mellan aktörer: R5 har `actor`, `process.step.operation` med initiator och mottagare, `alternative` och `workflow` till andra scenarier. `PlanDefinition` och `ActivityDefinition` beskriver vad som ska göras i vården (protokoll, beslutsstöd), inte vilka system som anropar vilka. Kraven ligger i `Requirements`, rollerna i `ActorDefinition` och API:erna i `CapabilityStatement`.
+`PlanDefinition` med `type = workflow-definition` är FHIR:s resurs för fördefinierade arbetsflöden: vilka åtgärder som görs, av vem, i vilken ordning och med vilken information. `ExampleScenario` beskriver interaktionerna mellan system med `operation`, initiator och mottagare. Kraven ligger i `Requirements`, rollerna i `ActorDefinition` och API:erna i `CapabilityStatement`.
 
 ## Definitionsregister: IG:arnas definitioner som API
 

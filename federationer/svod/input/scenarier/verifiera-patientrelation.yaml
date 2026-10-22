@@ -14,5 +14,5 @@ steg:
   - titel: Konsumenten verifierar användarens patientrelation
     fran: konsument
     till: tgp
-    operation: search-system
+    aktivitet: kontrollera
     krav: Konsumenten SKA verifiera patientrelation innan information hämtas från andra vårdgivare.

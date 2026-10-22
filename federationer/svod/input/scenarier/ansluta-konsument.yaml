@@ -12,5 +12,4 @@ steg:
   - titel: Konsumenten registrerar en prenumeration på ny data
     fran: konsument
     till: prenumeration
-    operation: create
-    resurstyp: Subscription
+    aktivitet: registrera

@@ -146,10 +146,12 @@ Description: "Anges på en federations-IG: delflöden som vävs in i varje anvä
 Extension: ScenarioAktorExt
 Id: scenario-aktor
 Title: "Scenarioaktör"
-Description: "Binder en aktör i ett ExampleScenario till den/de systemroller (ActorDefinition) den spelar. Upprepas när en aktör spelar roller från både domän och federation."
+Description: "Binder en aktör i ett ExampleScenario eller ett arbetsflöde (PlanDefinition) till den/de systemroller (ActorDefinition) den spelar. Upprepas när en aktör spelar roller från både domän och federation."
 * ^status = #draft
 * ^context[+].type = #element
 * ^context[=].expression = "ExampleScenario.actor"
+* ^context[+].type = #element
+* ^context[=].expression = "PlanDefinition.actor"
 * value[x] only canonical
 * valueCanonical only Canonical(ActorDefinition)
 
@@ -218,3 +220,33 @@ Description: "Anges på en logisk modell (informationsbehov): den publicerade sp
 * ^context[+].type = #element
 * ^context[=].expression = "StructureDefinition"
 * value[x] only canonical
+
+Extension: TillamparExt
+Id: tillampar
+Title: "Tillämpar"
+Description: "Sätts av ig-composer på ett ExampleScenario i en tjänst eller stödtjänst: det logiska arbetsflöde (PlanDefinition, workflow-definition) som scenariot tillämpar."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ExampleScenario"
+* value[x] only canonical
+* valueCanonical only Canonical(PlanDefinition)
+
+Extension: SpecifikationExt
+Id: specifikation
+Title: "Specifikation"
+Description: "Sätts av ig-composer på ett tillämpat steg i ett ExampleScenario: den specifikation (CapabilityStatement kind=requirements) som interaktionen följer, t.ex. tjänstens API för en informationsmängd eller stödtjänstens API."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ExampleScenario.process.step"
+* value[x] only canonical
+* valueCanonical only Canonical(CapabilityStatement)
+
+Extension: BindningExt
+Id: bindning
+Title: "Bindning"
+Description: "Sätts av ig-composer på ett tillämpat steg: hur aktiviteten bands till en interaktion – härledd ur mottagarens förmågor, angiven i tjänstens tillämpning, eller angiven i ett tillämpat flöde."
+* ^status = #draft
+* ^context[+].type = #element
+* ^context[=].expression = "ExampleScenario.process.step"
+* value[x] only code
+* valueCode from BindningVS (required)

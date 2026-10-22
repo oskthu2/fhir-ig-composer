@@ -25,7 +25,6 @@ steg:
   - titel: Journalsystemet söker patientens vårdkontakter
     fran: journal
     till: kalla
-    operation: search-type
     hamtar: vardkontakt
     alternativ:
       - titel: Källsystemet svarar inte
@@ -38,7 +37,6 @@ steg:
   - titel: Journalsystemet söker patientens fasta kontakter
     fran: journal
     till: kalla
-    operation: search-type
     hamtar: fastkontakt
 
   - titel: Journalsystemet visar vårdkontakter och fasta kontakter
