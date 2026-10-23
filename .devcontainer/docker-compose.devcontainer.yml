@@ -1,7 +1,9 @@
 # Tillägg för devcontainern: arbetsytan monteras från repot och containern
 # hålls igång; studion startas av postStartCommand.
+# Sökvägar räknas från den första compose-filens katalog (repots rot), inte
+# från denna fil.
 services:
   studio:
     volumes:
-      - ..:/arbetsyta:cached
+      - .:/arbetsyta:cached
     command: sleep infinity
