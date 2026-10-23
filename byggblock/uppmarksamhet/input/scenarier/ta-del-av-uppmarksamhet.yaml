@@ -1,0 +1,28 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: TaDelAvUppmarksamhet
+nyckel: UPPM
+titel: Ta del av uppmärksamhetsinformation
+syfte: Den som har rätt att ta del av patientens journal ska se information som vården behöver uppmärksammas på, med överkänsligheter i detalj.
+aktorer:
+  lasare: UppmLasare
+  konsument: UppmKonsument
+  producent: UppmProducent
+informationsbehov:
+  signal: UppmarksamhetssignalInfo
+  overkanslighet: OverkanslighetInfo
+steg:
+  - titel: Läsaren öppnar uppmärksamhetsinformationen
+    fran: lasare
+    till: konsument
+  - titel: Konsumenten hämtar patientens uppmärksamhetssignaler
+    fran: konsument
+    till: producent
+    hamtar: signal
+  - titel: Konsumenten hämtar överkänsligheterna som signalerna pekar på
+    fran: konsument
+    till: producent
+    hamtar: overkanslighet
+  - titel: Konsumenten visar signalerna, med överkänslighet först
+    fran: konsument
+    till: lasare
+    krav: Konsumenten SKA visa överkänsligheter med agens och allvarlighetsgrad tydligt åtskilda från övrig uppmärksamhetsinformation.

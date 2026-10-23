@@ -9,6 +9,8 @@ Description: "Källsystem som tillhandahåller information till en patientövers
 * type = #system
 * capabilities = Canonical(PSProducentCS)
 * derivedFrom[0] = Canonical(FKProducent)
+* derivedFrom[+] = Canonical(DiagProducent)
+* derivedFrom[+] = Canonical(UppmProducent)
 
 Instance: PSKonsument
 InstanceOf: ActorDefinition
@@ -21,6 +23,8 @@ Description: "System som sammanställer och visar en patientöversikt."
 * type = #system
 * capabilities = Canonical(PSKonsumentCS)
 * derivedFrom[0] = Canonical(FKKonsument)
+* derivedFrom[+] = Canonical(DiagKonsument)
+* derivedFrom[+] = Canonical(UppmKonsument)
 
 Instance: PSProducentCS
 InstanceOf: CapabilityStatement

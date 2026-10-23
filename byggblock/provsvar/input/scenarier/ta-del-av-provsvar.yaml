@@ -1,0 +1,28 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: TaDelAvProvsvar
+nyckel: PROV
+titel: Ta del av provsvar
+syfte: Den som har rätt att ta del av patientens journal ska kunna se provsvar med analysresultat, tolkning och referensintervall.
+aktorer:
+  lasare: ProvLasare
+  konsument: ProvKonsument
+  producent: ProvProducent
+informationsbehov:
+  svar: ProvsvarInfo
+  analys: AnalysresultatInfo
+steg:
+  - titel: Läsaren öppnar provsvaren
+    fran: lasare
+    till: konsument
+  - titel: Konsumenten hämtar patientens provsvar
+    fran: konsument
+    till: producent
+    hamtar: svar
+  - titel: Konsumenten hämtar analysresultaten i svaren
+    fran: konsument
+    till: producent
+    hamtar: analys
+  - titel: Konsumenten visar svaren med analyser
+    fran: konsument
+    till: lasare
+    krav: Konsumenten SKA visa värde, tolkning och referensintervall för varje analys, och om svaret är preliminärt.

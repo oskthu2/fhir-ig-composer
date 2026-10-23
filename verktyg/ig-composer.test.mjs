@@ -36,6 +36,10 @@ test('NPÖ komponeras utan fel', () => {
     ['inera.build.conventions', 'referera'],
     ['inera.bb.patientoversikt', 'kopiera'],
     ['inera.bb.fastakontakter', 'kopiera'],
+    ['inera.bb.diagnos', 'kopiera'],
+    ['inera.bb.grund', 'kopiera'],
+    ['inera.bb.uppmarksamhet', 'kopiera'],
+    ['inera.bb.provsvar', 'kopiera'],
     ['inera.fed.svod', 'kopiera'],
     ['inera.st.t2', 'kopiera'],
   ]);
@@ -59,16 +63,21 @@ test('exempel och artefakter från refererade paket kopieras inte', () => {
 test('federationen ger en bas per exponerad resurstyp', () => {
   const r = npo();
   assert.deepEqual(r.generated.filter((e) => e.kind === 'Profile').map((e) => e.name).sort(),
-    ['SVODMetadataCareTeam', 'SVODMetadataEncounter']);
+    ['SVODMetadataAllergyIntolerance', 'SVODMetadataCareTeam', 'SVODMetadataCondition', 'SVODMetadataDiagnosticReport',
+      'SVODMetadataEncounter', 'SVODMetadataFlag', 'SVODMetadataObservation']);
+  // Grundens stödprofiler (Patient, Organisationsenhet) realiserar inget informationsbehov och exponeras inte.
+  assert.ok(!r.exposed.some((p) => ['SEPatient', 'SEOrganization', 'SEPractitionerRole'].includes(p.name)));
   assert.equal(r.copied.find((e) => e.name === 'FastKontakt').origin.injiceradBas, 'SVODMetadataCareTeam');
   assert.ok(!r.exposed.some((p) => p.name === 'Vardkontakt'), 'Vardkontakt skärps av VardkontaktNPO');
 });
 
 test('tjänsteaktörens kravprofil följer derivedFrom och baser', () => {
   const k = npo().kravprofiler.find((x) => x.aktor.name === 'NPOKallsystem');
-  assert.deepEqual(k.forfader.map((f) => f.name), ['PSProducent', 'FKProducent', 'SVODKallsystem', 'TjanstekatalogRegistrerare', 'Federationsmedlem']);
-  // Obligatoriska informationsmängder importeras, den valfria (FastKontakt) inte.
-  assert.deepEqual(k.formagor.imports, ['PSProducentCS', 'FKProducentCS', 'SVODKallsystemCS', 'TjanstekatalogRegistrerareCS', 'VardkontaktAPI']);
+  assert.deepEqual(k.forfader.map((f) => f.name), ['PSProducent', 'FKProducent', 'DiagProducent', 'UppmProducent', 'ProvProducent',
+    'SVODKallsystem', 'TjanstekatalogRegistrerare', 'Federationsmedlem']);
+  // Obligatoriska informationsmängder importeras, de valfria (Fast kontakt, Diagnos, Uppmärksamhet, Provsvar) inte.
+  assert.deepEqual(k.formagor.imports, ['PSProducentCS', 'FKProducentCS', 'DiagProducentCS', 'UppmProducentCS', 'ProvProducentCS',
+    'SVODKallsystemCS', 'TjanstekatalogRegistrerareCS', 'VardkontaktAPI']);
   const kontakt = k.element.filter((o) => o.profil.name === 'VardkontaktNPO' && o.element === 'extension[kontaktuppgift]');
   assert.deepEqual(kontakt.map((o) => o.kod), ['SHALL:populate', 'SHOULD:populate-if-known']);
   assert.ok(k.element.some((o) => o.aktor === 'SVODKallsystem' && o.kalla.name === 'SVODMetadataEncounter'));
@@ -102,7 +111,9 @@ test('lokal tjänsteprofil utan federationens bas ger fel', () => {
 test('matrisen placerar tjänsterna i rätt celler', () => {
   const { json } = matrix(ws);
   // Byggblock som tjänsterna använder först, sedan fristående kandidater; delblock (fasta kontakter) inte alls.
-  assert.deepEqual(json.domaner.slice(0, 3), ['inera.bb.patientoversikt', 'inera.bb.labbsvar', 'inera.bb.pot2']);
+  assert.deepEqual(json.domaner.slice(0, 4), ['inera.bb.patientoversikt', 'inera.bb.labbsvar', 'inera.bb.provsvar', 'inera.bb.pot2']);
+  // Byggblock som bara ingår i andra byggblock (grund, diagnos, uppmärksamhet) är inte egna rader.
+  assert.ok(!['inera.bb.grund', 'inera.bb.diagnos', 'inera.bb.uppmarksamhet'].some((d) => json.domaner.includes(d)));
   assert.ok(['inera.bb.inkorg', 'inera.bb.vaccinationer', 'inera.bb.remisser'].every((d) => json.domaner.includes(d)));
   assert.ok(!json.domaner.includes('inera.bb.fastakontakter'));
   assert.ok(json.rader.every((r) => r.celler.find((c) => c.domän === 'inera.bb.inkorg').tjanster.length === 0));
@@ -110,6 +121,7 @@ test('matrisen placerar tjänsterna i rätt celler', () => {
   const cell = (fed, dom) => json.rader.find((r) => r.federation === fed).celler.find((c) => c.domän === dom).tjanster;
   assert.deepEqual(cell('inera.fed.svod', 'inera.bb.patientoversikt'), ['inera.tjanst.npo']);
   assert.deepEqual(cell('inera.fed.svod', 'inera.bb.labbsvar'), []);
+  assert.deepEqual(cell('inera.fed.svod', 'inera.bb.provsvar'), ['inera.tjanst.npo']);
   assert.deepEqual(cell('inera.fed.individuell', 'inera.bb.patientoversikt'), ['inera.tjanst.journal1177']);
   assert.deepEqual(cell('inera.fed.individuell', 'inera.bb.labbsvar'), ['inera.tjanst.journal1177']);
 });
@@ -117,7 +129,7 @@ test('matrisen placerar tjänsterna i rätt celler', () => {
 test('1177 Journal: två domäner, federationens bas på alla exponerade profiler', () => {
   const r = compose(ws.get('inera.tjanst.journal1177'), loadWorkspace(root), rules);
   assert.deepEqual(r.fel, []);
-  assert.deepEqual(r.exposed.map((p) => p.name).sort(), ['FastKontakt', 'Labbsvar', 'Vardkontakt']);
+  assert.deepEqual(r.exposed.map((p) => p.name).sort(), ['Diagnos', 'FastKontakt', 'Labbsvar', 'Overkanslighet', 'Uppmarksamhetssignal', 'Vardkontakt']);
   assert.ok(r.exposed.every((p) => p.origin.injiceradBas?.startsWith('IndividuellMetadata')));
 });
 
@@ -129,12 +141,12 @@ test('1177 Journal: märkande och filtrerande källsystem får olika krav', () =
   assert.ok(keys('Journal1177KallsystemMarkande').includes('IND-M-1'));
   assert.ok(!keys('Journal1177KallsystemMarkande').includes('IND-F-1'));
   assert.ok(keys('Journal1177KallsystemFiltrerande').includes('IND-F-1'));
-  assert.equal(security('Journal1177KallsystemMarkande').length, 3);
+  assert.equal(security('Journal1177KallsystemMarkande').length, 6);
   assert.equal(security('Journal1177KallsystemFiltrerande').length, 0);
   // Gemensam förfader importeras en gång.
   assert.deepEqual(k('Journal1177KallsystemMarkande').formagor.imports,
-    ['PSProducentCS', 'FKProducentCS', 'LabProducentCS', 'IndividuellKallsystemCS', 'TjanstekatalogRegistrerareCS',
-      'VardkontaktAPI', 'FastKontaktAPI', 'LabbsvarAPI']);
+    ['PSProducentCS', 'FKProducentCS', 'DiagProducentCS', 'UppmProducentCS', 'LabProducentCS', 'IndividuellKallsystemCS',
+      'TjanstekatalogRegistrerareCS', 'VardkontaktAPI', 'FastKontaktAPI', 'LabbsvarAPI']);
 });
 
 test('RuleSet-expansion ger sökvägar med kontext', () => {
@@ -188,8 +200,8 @@ test('NPÖ: delflöden vävs in – verifiering och engagemang en gång, T2-upps
   const uc = npoUc().find((u) => u.namn === 'VardpersonalPatientoversikt');
   const huvud = uc.steg.filter((s) => !s.nr.includes('.'));
   assert.deepEqual(huvud.map((s) => (s.typ === 'delflode' ? `[${s.delflode}]` : s.operation || 'ui')), [
-    'ui', '[SVODVerifieraPatientrelation]', '[EngagemangsUppslag]', '[T2Uppslag]', 'search-type', '[SVODSparrOchLoggning]',
-    '[T2Uppslag]', 'search-type', '[SVODSparrOchLoggning]', 'ui',
+    'ui', '[SVODVerifieraPatientrelation]', '[EngagemangsUppslag]',
+    ...Array(4).fill(['[T2Uppslag]', 'search-type', '[SVODSparrOchLoggning]']).flat(), 'ui',
   ]);
   assert.ok(uc.steg.filter((s) => s.delflode).every((s) => s.invavd === 'inera.fed.svod'));
 });
@@ -197,7 +209,7 @@ test('NPÖ: delflöden vävs in – verifiering och engagemang en gång, T2-upps
 test('NPÖ: informationsbehov harmoniseras till tjänstens profiler', () => {
   const uc = npoUc().find((u) => u.namn === 'VardpersonalPatientoversikt');
   assert.deepEqual(uc.informationsbehov.map((i) => [i.modell, i.profil]),
-    [['VardkontaktInfo', 'VardkontaktNPO'], ['FastKontaktInfo', 'FastKontakt']]);
+    [['VardkontaktInfo', 'VardkontaktNPO'], ['FastKontaktInfo', 'FastKontakt'], ['DiagnosuppgiftInfo', 'Diagnos'], ['UppmarksamhetssignalInfo', 'Uppmarksamhetssignal']]);
 });
 
 test('NPÖ: scenarioaktörer binds till roller och tjänsteaktörer, stödtjänster känns igen', () => {
@@ -230,7 +242,7 @@ test('byggblocket kompilerar sitt användningsfall utan invävning', () => {
   const r = compose(ws.get('inera.bb.patientoversikt'), loadWorkspace(root), rules);
   const uc = r.anvandningsfall.find((u) => u.namn === 'VardpersonalPatientoversikt');
   assert.ok(!uc.steg.some((s) => s.typ === 'delflode'));
-  assert.deepEqual(uc.informationsbehov.map((i) => i.profil), ['Vardkontakt', 'FastKontakt']);
+  assert.deepEqual(uc.informationsbehov.map((i) => i.profil), ['Vardkontakt', 'FastKontakt', 'Diagnos', 'Uppmarksamhetssignal']);
 });
 
 test('täckningen hittar okänd roll, okänt informationsbehov och saknad förmåga', () => {
@@ -296,7 +308,9 @@ test('system: summan av API-krav över roller, med gap mot nuläget', () => {
   // NPÖ:s Fast kontakt är valfri och inte vald av JournalX: bara 1177 Journal kräver CareTeam.
   assert.deepEqual(api('server', 'CareTeam').roller, ['inera.tjanst.journal1177#Journal1177KallsystemMarkande']);
   const npo = x.roller.find((r) => r.aktor === 'NPOKallsystem').informationsmangder;
-  assert.deepEqual(npo.map((i) => [i.nyckel, i.krav, i.vald]), [['FastKontaktInfo', 'valfri', false], ['VardkontaktInfo', 'obligatorisk', true]]);
+  assert.deepEqual(npo.map((i) => [i.nyckel, i.krav, i.vald]), [
+    ...['FastKontaktInfo', 'DiagnosuppgiftInfo', 'UppmarksamhetssignalInfo', 'OverkanslighetInfo', 'ProvsvarInfo', 'AnalysresultatInfo'].map((n) => [n, 'valfri', false]),
+    ['VardkontaktInfo', 'obligatorisk', true]]);
 });
 
 test('system: en vald valfri informationsmängd ger samma profil med två kanoniska URL:er', () => {
@@ -602,7 +616,7 @@ test('logiska flöden: byggblock och federationer får PlanDefinition (workflow-
   assert.deepEqual(lasRes('byggblock/patientoversikt', 'ExampleScenario-'), []);
   const pd = lasRes('byggblock/patientoversikt', 'PlanDefinition-').find((x) => x.name === 'VardpersonalPatientoversikt');
   assert.equal(pd.type.coding[0].code, 'workflow-definition');
-  assert.deepEqual(pd.action.map((a) => a.code?.coding[0].code || null), [null, 'hamta', 'hamta', 'visa']);
+  assert.deepEqual(pd.action.map((a) => a.code?.coding[0].code || null), [null, 'hamta', 'hamta', 'hamta', 'hamta', 'visa']);
   const hamta = pd.action[1];
   assert.deepEqual(hamta.participant.map((p) => p.actorId), ['journal', 'kalla']);
   assert.equal(hamta.output[0].requirement.profile[0], 'https://fhir.inera.se/ig/bb-patientoversikt/StructureDefinition/VardkontaktInfo');
@@ -673,14 +687,15 @@ test('scopes ur IG:n: mottagare per anrop, SMART v2, och avsmalning med informat
   const m = loadManifests(loadWorkspace(root))['inera.tjanst.npo'];
   const b = behorigheterForRoll(m, 'NPOKonsument');
   const till = Object.fromEntries(b.mottagare.map((x) => [x.aktor, x.scopes]));
-  assert.deepEqual(till.NPOKallsystem, ['system/CareTeam.s', 'system/Encounter.s', 'system/Provenance.s']);
+  assert.deepEqual(till.NPOKallsystem, ['system/AllergyIntolerance.r', 'system/CareTeam.s', 'system/Condition.s', 'system/DiagnosticReport.s',
+    'system/Encounter.s', 'system/Flag.s', 'system/Observation.r', 'system/Provenance.s']);
   assert.deepEqual(till.Tjanstekatalog, ['system/Endpoint.s']);
   assert.deepEqual(till.SVODLoggtjanst, ['system/AuditEvent.c']);
   assert.deepEqual(b.utanMottagare, []);
   assert.ok(arKonsumentroll(m, 'NPOKonsument'));
   assert.ok(!arKonsumentroll(m, 'NPOKallsystem'), 'källsystemet har serverförmågor');
   const smal = behorigheterForRoll(m, 'NPOKonsument', ['VardkontaktInfo']);
-  assert.deepEqual(smal.bortvalda, ['CareTeam']);
+  assert.deepEqual(smal.bortvalda, ['AllergyIntolerance', 'CareTeam', 'Condition', 'DiagnosticReport', 'Flag', 'Observation']);
   assert.ok(!smal.scopes.includes('system/CareTeam.s'));
   assert.deepEqual(sammanfogaScopes(['system/Endpoint.cu', 'system/Endpoint.s', 'system/Flag.s']), ['system/Endpoint.cus', 'system/Flag.s']);
 });
@@ -736,7 +751,8 @@ test('WSO2-plan (torrkörning): bara behöriga roller, nycklar per miljö, åter
   assert.equal(plan.nycklar.keyType, 'SANDBOX');
   assert.ok(plan.nycklar.scopes.every((s) => /^system\/[A-Za-z]+\.[cruds]$/.test(s)), 'nyckeln begär operationsscopen, en bokstav per scope');
   const api = plan.apier.find((a) => a.name === 'npo-NPOKallsystem');
-  assert.deepEqual(api.operations.map((o) => `${o.verb} ${o.target}`), ['GET /CareTeam', 'GET /Encounter', 'GET /Provenance']);
+  assert.deepEqual(api.operations.map((o) => `${o.verb} ${o.target}`), ['GET /AllergyIntolerance/{id}', 'GET /CareTeam', 'GET /Condition',
+    'GET /DiagnosticReport', 'GET /Encounter', 'GET /Flag', 'GET /Observation/{id}', 'GET /Provenance']);
   assert.ok(plan.apier.find((a) => a.name === 'Tjanstekatalog').stodtjanst);
   const prod = wso2Plan(sys, behorigheter, [{ ...roller[0], miljo: 'prod', status: 'godkand' }], { miljo: 'prod' });
   assert.equal(prod.nycklar.keyType, 'PRODUCTION');
@@ -929,14 +945,14 @@ test('publicera: webbrot per kanonisk URL, versioner behålls, paket och paketfl
     assert.deepEqual(r1.varningar, []);
     assert.equal(r1.resultat[0].sokvag, 'ig/svod');
     assert.equal(r1.resultat[0].kalla, 'sushi');
-    for (const f of ['ig/svod/StructureDefinition-svod-vardenhet.json', 'ig/svod/StructureDefinition-svod-vardenhet.html', 'ig/svod/0.1.0/StructureDefinition-svod-vardenhet.json', 'ig/svod/package.tgz', 'ig/svod/index.html', 'package-feed.xml', 'index.html']) {
+    for (const f of ['ig/svod/StructureDefinition-svod-provenans.json', 'ig/svod/StructureDefinition-svod-provenans.html', 'ig/svod/0.1.0/StructureDefinition-svod-provenans.json', 'ig/svod/package.tgz', 'ig/svod/index.html', 'package-feed.xml', 'index.html']) {
       assert.ok(fs.existsSync(path.join(ut, f)), f);
     }
     const lista = spawnSync('tar', ['-tzf', path.join(ut, 'ig/svod/package.tgz')], { encoding: 'utf8' }).stdout;
     assert.match(lista, /package\/package\.json/);
     // Nästa version: den förra ligger kvar och båda finns i package-list och flödet.
     publicera({ igs: [{ ...ig, version: '0.2.0' }], ut, datum: '2026-11-01' });
-    assert.ok(fs.existsSync(path.join(ut, 'ig/svod/0.1.0/StructureDefinition-svod-vardenhet.json')));
+    assert.ok(fs.existsSync(path.join(ut, 'ig/svod/0.1.0/StructureDefinition-svod-provenans.json')));
     assert.ok(fs.existsSync(path.join(ut, 'ig/svod/0.2.0/package.tgz')));
     const pl = JSON.parse(fs.readFileSync(path.join(ut, 'ig/svod/package-list.json'), 'utf8'));
     assert.deepEqual(pl.list.map((v) => [v.version, v.current]), [['current', true], ['0.2.0', true], ['0.1.0', false]]);

@@ -1,0 +1,23 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: TaDelAvDiagnoser
+nyckel: DIAG
+titel: Ta del av diagnoser
+syfte: Den som har rätt att ta del av patientens journal ska kunna se patientens diagnoser, med typ, kod och när de ställdes.
+aktorer:
+  lasare: DiagLasare
+  konsument: DiagKonsument
+  producent: DiagProducent
+informationsbehov:
+  diagnos: DiagnosuppgiftInfo
+steg:
+  - titel: Läsaren öppnar diagnoserna
+    fran: lasare
+    till: konsument
+  - titel: Konsumenten hämtar patientens diagnoser
+    fran: konsument
+    till: producent
+    hamtar: diagnos
+  - titel: Konsumenten visar diagnoserna
+    fran: konsument
+    till: lasare
+    krav: Konsumenten SKA visa diagnostyp, diagnoskod med benämning och bedömningstidpunkt.

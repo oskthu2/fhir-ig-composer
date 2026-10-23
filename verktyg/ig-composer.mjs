@@ -276,8 +276,17 @@ export function compose(ig, ws, rules) {
   };
   const superseded = new Set(profiles.map(parentOf).filter(Boolean));
   const rollOf = (e) => ws.get(e.origin.paket)?.roll;
+  // Exponerade profiler realiserar ett informationsbehov (själva eller via
+  // föräldern). Stödprofiler, som grundens Patient och Organisationsenhet,
+  // exponeras inte och får inte federationens mönster.
+  const realiserarNagot = (p) => {
+    for (let q = p, i = 0; q && i < 20; q = parentOf(q), i++) {
+      if (expandRules(q, ruleSets, KEEP).some((r) => r.insert?.name === 'Realiserar' && !r.path)) return true;
+    }
+    return false;
+  };
   const exposed = profiles.filter((p) => !superseded.has(p)
-    && ['lokal', 'kopierad'].includes(p.origin.lage) && rollOf(p) !== 'federation');
+    && ['lokal', 'kopierad'].includes(p.origin.lage) && rollOf(p) !== 'federation' && realiserarNagot(p));
 
   // 4. Federation: generera mönsterprofiler och lägg till dem som bas.
   const generated = [];

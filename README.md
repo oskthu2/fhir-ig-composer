@@ -14,6 +14,7 @@ Tjänster i prototypen:
 |---|---|---|---|
 | **Patientöversikt** | NPÖ | 1177 Journal | |
 | **Labbsvar** | *kandidat* | 1177 Journal | |
+| **Provsvar** | NPÖ | | |
 | **Patientöversikt (T2)** | | | Patientöversikt (T2) |
 | **1177 Inkorg** | | | |
 | **Formulär** | | | |
@@ -22,7 +23,24 @@ Tjänster i prototypen:
 | **Tidbokning** | | | |
 | **Vaccinationer** | | | |
 
-Innehållsspecifikationerna (byggblocken) är rader, eftersom de blir många, och federationerna kolumner. Byggblock som ännu inte ingår i någon tjänst står som kandidatrader. Delblock, som Fasta kontakter (som bara ingår i Patientöversikt), visas inte.
+Innehållsspecifikationerna (byggblocken) är rader, eftersom de blir många, och federationerna kolumner. Byggblock som ännu inte ingår i någon tjänst står som kandidatrader. Delblock, som Fasta kontakter, Diagnos och Uppmärksamhet (som ingår i Patientöversikt) och Grund, visas inte.
+
+## Pilot: byggblock och federationskrav ur EHDS-TK
+
+[EHDS-TK](https://github.com/Inera-AB/ehds-tk) beskriver hur Ineras RIVTA-tjänstekontrakt mappas till FHIR R4 för NPÖ och 1177 Journal. Den innehåller alla lager i matrisen, men hopbakade i samma profiler: kliniska krav, spärrmetadata, källsystem, säkerhetsmärkning och vilka tjänster som täcks. Piloten plockar isär en del av den, i **R5**. Profilerna ärver FHIR:s basresurser i stället för HL7 Europe Core, så de är inte en profilering av EURIDICE (som är R4); identifierarkonventionerna från svenska basprofiler behålls.
+
+| Ur EHDS-TK | Hit | Ändring i R5 |
+|---|---|---|
+| SEEHDSPatient, -Organization, -PractitionerRole | Byggblocket **Grund** (`inera.bb.grund`) | Ärver basresurserna. Stödprofiler: de realiserar inget informationsbehov, exponeras inte och får inte federationens mönster. |
+| SEEHDSConditionDiagnosis, kv_diagnostyp, ICD-10-SE | Byggblocket **Diagnos** (`inera.bb.diagnos`) | `recorder`/`asserter` blir `participant` (author, legal); `clinicalStatus` är obligatoriskt och härleds till active. |
+| SEEHDSFlag, SEEHDSAllergyIntolerance | Byggblocket **Uppmärksamhet** (`inera.bb.uppmarksamhet`) | Signalen pekar på överkänsligheten med `flag-detail`; `participant` på överkänsligheten. |
+| SEEHDSDiagnosticReportLab, SEEHDSObservationLab | Byggblocket **Provsvar** (`inera.bb.provsvar`) | Utan EU Core-arv. |
+| SEEHDSProvenance (custodian/author, yttre/inre spärr) | Federationen **SVOD**: profilen `SVODProvenans` | Ersätter SVOD:s egna extensions för vårdenhet och vårdgivare. Organisationerna refereras logiskt via HSA-id, eftersom en federation inte komponerar byggblock. |
+| `meta.source` (källsystem i tjänstekatalogen) | SVOD:s mönster `SVODMetadata` | Läggs på alla exponerade profiler i SVOD:s tjänster, i stället för att upprepas i varje profil (i EHDS-TK finns det i 20 profiler). |
+| `meta.security` NOPATIENT | Individuell tillgång (fanns redan) | Koden heter `NOPAT` i v3-ActCode; `NOPATIENT` i EHDS-TK finns inte. Mönstret läggs på alla exponerade profiler (i EHDS-TK bara i tre). |
+| ”Täcker NPÖ 2.0 och 1177 Journal 2.0” | Tjänsterna | Patientöversikt komponerar Diagnos och Uppmärksamhet; NPÖ komponerar dessutom Provsvar. De nya informationsmängderna är valfria: ett källsystem lämnar det det har. |
+
+Mappningen från RIV-TA (de logiska modellerna för meddelandena, mappningssidorna och mappningsbesluten) hör inte till byggblocken. Den kan bli en egen mappnings-IG som refererar byggblockens profiler. Byggblockens informationsbehov är skrivna oberoende av källformatet.
 
 Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak och kan testas mot den (se *Två lägen*).
 
@@ -479,8 +497,12 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 ├── konventioner/              inera.build.conventions  (konvention, publik)
 │   └── regler.yaml            globala kompositionsregler
 ├── byggblock/
+│   ├── grund/                 inera.bb.grund           (byggblock, intern) – Patient, organisationsenhet, vårdpersonal (EHDS-TK)
+│   ├── diagnos/               inera.bb.diagnos         (byggblock, intern) – Condition (EHDS-TK)
+│   ├── uppmarksamhet/         inera.bb.uppmarksamhet   (byggblock, intern) – Flag och AllergyIntolerance (EHDS-TK)
+│   ├── provsvar/              inera.bb.provsvar        (byggblock, intern) – DiagnosticReport och Observation (EHDS-TK)
 │   ├── fastakontakter/        inera.bb.fastakontakter  (byggblock, intern)
-│   ├── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter
+│   ├── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter, Diagnos och Uppmärksamhet
 │   ├── labbsvar/              inera.bb.labbsvar        (byggblock, intern)
 │   ├── po-t2/                 inera.bb.pot2            (byggblock, intern) – diagnoser, läkemedel, uppmärksamhet
 │   ├── inkorg/                inera.bb.inkorg          (byggblock, intern) – 1177 Inkorg, meddelanden till invånaren (Communication)
@@ -588,7 +610,7 @@ Konfigurationen hamnar i den publicerade ImplementationGuide-resursen, så det g
 
 `* insert Bas(Profil)` är det enda stället där multipelt arv uttrycks. I dag blir det `imposeProfile` ur Extensions Pack, som valideraren kontrollerar. När multipelt arv tas upp officiellt i FHIR/FSH ändras bara RuleSet `Bas` i konventionspaketet.
 
-Begränsning i dag: med `imposeProfile` ärvs inte tilläggsbasens slice-namn, så `extension[vardenhet]` går inte att använda i en instans av `VardkontaktNPO`. Federationen erbjuder därför alias (`$svod-vardenhet`) och RuleSet `SVODExempelmetadata` för exempel.
+Begränsning i dag: med `imposeProfile` ärvs inte tilläggsbasens slice-namn, så federationens slicar går inte att adressera i en instans av en tjänsteprofil. Federationerna erbjuder därför RuleSets för exempel (`SVODExempelmetadata`, `SVODExempelprovenans`, `IndividuellEjForInvanare`).
 
 ## Obligations och efterbehandling
 

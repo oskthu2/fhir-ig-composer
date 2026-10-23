@@ -16,6 +16,8 @@ aktorer:
 informationsbehov:
   vardkontakt: VardkontaktInfo
   fastkontakt: FastKontaktInfo
+  diagnos: DiagnosuppgiftInfo
+  signal: UppmarksamhetssignalInfo
 
 steg:
   - titel: Vårdpersonalen öppnar patientöversikten för patienten
@@ -39,6 +41,16 @@ steg:
     till: kalla
     hamtar: fastkontakt
 
-  - titel: Journalsystemet visar vårdkontakter och fasta kontakter
+  - titel: Journalsystemet söker patientens diagnoser
+    fran: journal
+    till: kalla
+    hamtar: diagnos
+
+  - titel: Journalsystemet söker patientens uppmärksamhetsinformation
+    fran: journal
+    till: kalla
+    hamtar: signal
+
+  - titel: Journalsystemet visar vårdkontakter, fasta kontakter, diagnoser och uppmärksamhetsinformation
     fran: journal
     till: vardpersonal

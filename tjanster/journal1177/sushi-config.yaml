@@ -26,6 +26,12 @@ extension:
     valueCode: publik
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/anvandningsfall
     valueString: TaDelAvLabbsvar
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/valfri-informationsmangd
+    valueString: DiagnosuppgiftInfo
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/valfri-informationsmangd
+    valueString: UppmarksamhetssignalInfo
+  - url: https://fhir.inera.se/ig/conventions/StructureDefinition/valfri-informationsmangd
+    valueString: OverkanslighetInfo
   - url: https://fhir.inera.se/ig/conventions/StructureDefinition/komponerar
     extension:
       - url: paket

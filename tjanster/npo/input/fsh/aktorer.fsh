@@ -10,6 +10,7 @@ Description: "Källsystem som tillhandahåller information till NPÖ."
 * status = #draft
 * type = #system
 * derivedFrom[0] = Canonical(PSProducent)
+* derivedFrom[+] = Canonical(ProvProducent)
 * derivedFrom[+] = Canonical(SVODKallsystem)
 * capabilities = Canonical(NPOKallsystemCS)
 
@@ -23,5 +24,6 @@ Description: "System som visar NPÖ för behörig vårdpersonal."
 * status = #draft
 * type = #system
 * derivedFrom[0] = Canonical(PSKonsument)
+* derivedFrom[+] = Canonical(ProvKonsument)
 * derivedFrom[+] = Canonical(SVODKonsument)
 * capabilities = Canonical(NPOKonsumentCS)

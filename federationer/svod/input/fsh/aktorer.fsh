@@ -39,7 +39,8 @@ Description: "Infrastrukturkrav på källsystem i SVOD."
 * rest[0].mode = #server
 * rest[=].documentation = "Källsystemet ska vara registrerat i tjänstekatalogen, publicera vilka patienter som finns per ändpunkt till patientindex, och notifiera ny data via prenumerationstjänsten."
 * rest[=].resource[0].type = #Provenance
-* rest[=].resource[=].documentation = "Proveniens för källsystem och mellanliggande infrastruktur."
+* rest[=].resource[=].profile = Canonical(SVODProvenans)
+* rest[=].resource[=].documentation = "Proveniens per klinisk resurs: vårdgivare och vårdenhet för spärr."
 * rest[=].resource[=].interaction[0].code = #search-type
 * rest[=].resource[=].searchParam[0].name = "target"
 * rest[=].resource[=].searchParam[=].definition = "http://hl7.org/fhir/SearchParameter/Provenance-target"
@@ -79,9 +80,12 @@ Description: "Regulatoriska krav på källsystem i SVOD."
 * statement[0].key = "SVOD-K-1"
 * statement[=].label = "Metadata för spärr"
 * statement[=].conformance[0] = #SHALL
-* statement[=].requirement = "Varje resurs SKA bära vårdenhet och vårdgivare så att konsumenten kan tillämpa inre och yttre spärr (PDL 4 kap. 4 §, 6 kap. 2 §)."
-* statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/svod/StructureDefinition/svod-vardenhet"
-* statement[=].satisfiedBy[+] = "https://fhir.inera.se/ig/svod/StructureDefinition/svod-vardgivare"
+* statement[=].requirement = "Varje klinisk resurs SKA åtföljas av en proveniens med vårdgivare och vårdenhet, så att konsumenten kan tillämpa yttre och inre spärr (PDL 4 kap. 4 §, 6 kap. 2 §)."
+* statement[=].satisfiedBy[0] = "https://fhir.inera.se/ig/svod/StructureDefinition/svod-provenans"
+* statement[+].key = "SVOD-K-3"
+* statement[=].label = "Källsystem"
+* statement[=].conformance[0] = #SHALL
+* statement[=].requirement = "Varje resurs SKA ange källsystemets anslutningspunkt i tjänstekatalogen i meta.source."
 * statement[+].key = "SVOD-K-2"
 * statement[=].label = "Registrering i tjänstekatalogen"
 * statement[=].conformance[0] = #SHALL
@@ -100,7 +104,7 @@ Description: "Regulatoriska krav på konsumenter i SVOD."
 * statement[0].key = "SVOD-C-1"
 * statement[=].label = "Spärr"
 * statement[=].conformance[0] = #SHALL
-* statement[=].requirement = "Konsumenten SKA tillämpa inre och yttre spärr utifrån resursens vårdenhet och vårdgivare."
+* statement[=].requirement = "Konsumenten SKA tillämpa yttre och inre spärr utifrån vårdgivare och vårdenhet i resursens proveniens."
 * statement[+].key = "SVOD-C-2"
 * statement[=].label = "Patientrelation"
 * statement[=].conformance[0] = #SHALL
