@@ -37,6 +37,14 @@ Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak o
 | **Docker lokalt** | Samma sak på din dator; behövs mot interna testmiljöer | `docker compose up` → http://localhost:4900/ (studio), http://localhost:4901/ (studio, testmiljö) och http://localhost:8080/fhir (register) |
 | **Node lokalt** | Allt utom registret | Node ≥ 20 och `npm i -g fsh-sushi@3`, sedan kommandona under *Bygga* och `node verktyg/ig-composer.mjs studio` |
 
+**Uppdatera till senaste versionen** (i codespacets terminal):
+
+```sh
+npm run uppdatera        # = node verktyg/ig-composer.mjs uppdatera [--bygg]
+```
+
+Kommandot gör `git pull --ff-only` och sedan det som ändringarna kräver: `npm ci` om beroendena ändrats, bygget (SUSHI) om IG:arna eller verktyget ändrats (`--bygg` tvingar fram det), och omstart av studiorna. Ladda sedan om sidan. Lokala ändringar från studion behålls; git vägrar bara om de hämtade ändringarna rör samma filer. Om devcontainern, compose-filerna eller `Dockerfile` har ändrats säger kommandot till: då behöver containern byggas om (Ctrl+Shift+P → *Codespaces: Rebuild Container*). Studiorna körs med `node --watch` och startar dessutom om av sig själva när verktygets moduler ändras.
+
 Devcontainern (`.devcontainer/`) och `docker-compose.yml` beskriver samma miljö: tjänsten `studio` (Node, SUSHI, git; i devcontainern även Java och Jekyll för IG Publisher) med arbetsytan monterad, och tjänsten `register` (HAPI FHIR R5). Studion skriver i dina filer, så ändringar syns i `git status` som vanligt.
 
 ## Kravmodell: användningsfall, scenarier och spårbarhet

@@ -1144,6 +1144,50 @@ function skrivKorningar(r) {
   }
 }
 
+// Hämtar det senaste från origin och gör det som ändringarna kräver: npm ci
+// om beroendena ändrats, bygg om IG:arna eller verktyget ändrats, och omstart
+// av studiorna (startloopen i devcontainern startar dem igen). Ändras miljön
+// själv (devcontainer, compose, Dockerfile) behöver containern byggas om.
+function uppdatera(root, tvingaBygg) {
+  const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' });
+  const fore = git('rev-parse', 'HEAD').stdout.trim();
+  const lokala = git('status', '--porcelain').stdout.trim().split('\n').filter(Boolean);
+  if (lokala.length) console.log(`Lokala ändringar (${lokala.length} filer) behålls; git vägrar bara om hämtade ändringar rör samma filer.`);
+  const pull = git('pull', '--ff-only');
+  process.stdout.write(pull.stdout);
+  if (pull.status !== 0) {
+    console.error(pull.stderr.trim());
+    console.error('Hämtningen gick inte igenom. Committa eller återställ de lokala ändringarna (studions lista Ändrade filer) och försök igen.');
+    return 1;
+  }
+  const efter = git('rev-parse', 'HEAD').stdout.trim();
+  const andrade = fore === efter ? [] : git('diff', '--name-only', fore, efter).stdout.trim().split('\n').filter(Boolean);
+  console.log(fore === efter ? 'Redan senaste versionen.' : `${fore.slice(0, 7)} → ${efter.slice(0, 7)}: ${andrade.length} filer ändrade.`);
+  const rör = (re) => andrade.some((f) => re.test(f));
+  let status = 0;
+  if (rör(/^verktyg\/package(-lock)?\.json$/) || !fs.existsSync(path.join(root, 'verktyg', 'node_modules'))) {
+    console.log('Beroendena har ändrats: npm ci …');
+    const npm = spawnSync('npm', ['ci', '--prefix', 'verktyg'], { cwd: root, stdio: 'inherit' });
+    if (npm.status !== 0) return 1;
+  }
+  const saknasManifest = [...loadWorkspace(root).values()].some((ig) => ig.komponerar.length && !fs.existsSync(path.join(ig.dir, OUT_MANIFEST)));
+  if (tvingaBygg || saknasManifest || rör(/^(konventioner|byggblock|federationer|stodtjanster|tjanster)\//) || rör(/^verktyg\/.*\.mjs$/)) {
+    console.log('Bygger IG:arna (SUSHI) …');
+    // Det nya verktyget, i en egen process.
+    const b = spawnSync(process.execPath, [path.join(root, 'verktyg', 'ig-composer.mjs'), 'bygg', '--arbetsyta', root], { cwd: root, stdio: 'inherit' });
+    if (b.status !== 0) { console.error('Bygget hade fel; se ovan.'); status = 1; }
+  }
+  // Studiorna i startloopen (devcontainern) startar om inom några sekunder.
+  // Mönstret träffar bara node-processerna, inte loopens sh, vars
+  // kommandorad också innehåller "ig-composer.mjs studio".
+  const stopp = spawnSync('pkill', ['-f', '^[^ ]*node .*ig-composer[.]mjs studio']);
+  console.log(stopp.status === 0 ? 'Studiorna startas om; ladda om sidan i webbläsaren om några sekunder.' : 'Ingen studio körde. Ladda om sidan när du startat den.');
+  if (rör(/^(\.devcontainer\/|docker-compose[^/]*\.ya?ml$|Dockerfile$)/)) {
+    console.log('Miljön har ändrats (devcontainer, compose eller Dockerfile): bygg om containern, Ctrl+Shift+P → Codespaces: Rebuild Container.');
+  }
+  return status;
+}
+
 function main(argv) {
   const args = argv.slice(2);
   const flag = args.indexOf('--arbetsyta');
@@ -1192,6 +1236,7 @@ function main(argv) {
     console.log(`Rapporter i ${dir}`);
     return status;
   }
+  if (cmd === 'uppdatera') return uppdatera(root, args.includes('--bygg'));
   if (['anslutning', 'scopes', 'klient', 'wso2'].includes(cmd)) {
     const manifests = loadManifests(ws);
     const miljoFlagga = args.indexOf('--miljo');
@@ -1381,7 +1426,7 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | anslutning [system] | scopes <system|tjänst> [aktör] [--miljo test|prod] | klient|wso2 [system] [--miljo test|prod] | studio [--port N] [--miljo test] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | anslutning [system] | scopes <system|tjänst> [aktör] [--miljo test|prod] | klient|wso2 [system] [--miljo test|prod] | studio [--port N] [--miljo test] | uppdatera [--bygg] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 

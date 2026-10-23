@@ -1,0 +1,12 @@
+{
+  "name": "fhir-ig-composer-arbetsyta",
+  "private": true,
+  "description": "Genvägar för arbetsytan. Verktyget och dess beroenden finns i verktyg/.",
+  "scripts": {
+    "uppdatera": "node verktyg/ig-composer.mjs uppdatera",
+    "bygg": "node verktyg/ig-composer.mjs bygg",
+    "studio": "node verktyg/ig-composer.mjs studio",
+    "studio:test": "node verktyg/ig-composer.mjs studio --miljo test --port 4901",
+    "test": "npm test --prefix verktyg"
+  }
+}
