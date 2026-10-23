@@ -106,7 +106,11 @@ export function wso2Plan(sys, behorigheter, anslutningar, { miljo = 'test', inst
   // operationer, så nyckeln begär operationsscopen (ett per bokstav).
   const scopes = [...new Set(apiUt.flatMap((a) => a.operations.flatMap((o) => o.scopes)))].sort();
   const nycklar = { keyType: inst.keyType, grantTypesToBeSupported: ['client_credentials'], scopes, validityTime: inst.giltighet };
-  const prenumerationer = produkter.map((p) => ({ applikation: applikation.name, apiProdukt: p.name, throttlingPolicy: inst.prenumerationspolicy, kraverGodkannande: inst.kraverGodkannande }));
+  const adressaterFor = (p) => med.find((b) => b.tjanst === p.tjanst && b.aktor === p.aktor)?.adressater || ['*'];
+  const prenumerationer = produkter.map((p) => ({
+    applikation: applikation.name, apiProdukt: p.name, throttlingPolicy: inst.prenumerationspolicy, kraverGodkannande: inst.kraverGodkannande,
+    adressater: adressaterFor(p),
+  }));
   const borttag = aterkallade.map((b) => ({ applikation: applikation.name, apiProdukt: produktNamn(b) }));
 
   const anrop = [
@@ -131,6 +135,7 @@ export function wso2Plan(sys, behorigheter, anslutningar, { miljo = 'test', inst
       'Sökvägarna gäller API Manager 4.x (Publisher v4, DevPortal v3); stäm av mot er installation.',
       'Scopenamnen följer SMART v2 (system/Typ.cruds); kontrollera att er version tillåter / och . i scopenamn, annars behöver de mappas.',
       'Bara API:er bakom Ineras gateway skyddas av WSO2. Producenter som exponerar egna API:er kontrollerar åtkomstintygets scopes själva.',
+      ...(prenumerationer.some((p) => !p.adressater.includes('*')) ? ['Adressatbegränsningen följer med i åtkomstintyget (anspråket adressater) och kontrolleras av producenten; WSO2 begränsar inte per adressat.'] : []),
     ],
   };
 }

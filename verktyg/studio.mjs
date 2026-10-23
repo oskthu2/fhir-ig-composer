@@ -15,6 +15,12 @@
 //   POST /api/anslut/forhandsgranska { system, titel, organisation, roller }  klient-CS, scopes, WSO2-plan
 //   POST /api/anslut               samma        (testmiljöläge) roller + anslutningar till behörig i test
 //   POST /api/anslutning/status    { system, tjanst, aktor, miljo, status, bevis }  nästa steg i kedjan
+//   POST /api/anslut/producent/forhandsgranska { system, titel, produkt, organisation, adress, roller }
+//   POST /api/anslut/producent     samma        (testmiljöläge) anslutningspunkt i testmiljöns katalog
+//   POST /api/producent/adress     { system, fran, till }  byt anropsadress (ändra vägval)
+//   PUT  /api/produkt/<id>         { titel, leverantor, foljer, foljsamhet }  lägg till eller ändra en produkt
+//   POST /api/produkt/<id>/godkannande { tjanst, aktor, status, bevis }  produktgodkännande per roll
+//   POST /api/organisation         { namn, hsaId }         lägg till en organisation i katalogen
 //
 // Testmiljöläge (studio --miljo test): studion för den som ansluter en klient.
 // Bara anslutningsflödet skriver, och bara anslutningar i test; IG:ar, flöden
@@ -29,6 +35,10 @@ import { loadSystems } from './system.mjs';
 import { overga } from './anslutning.mjs';
 import { behorigheterForSystem, klientCapabilityStatement, arKonsumentroll, sammanfogaScopes } from './behorighet.mjs';
 import { wso2Plan } from './wso2.mjs';
+import {
+  loadProdukter, skrivProdukt, organisationer, registreraOrganisation, registreraProducent, forhandsgranskaProducent,
+  producentMangder, arProducentroll, bytAdress, STANDARDKATALOG, HSA_ID, skrivProduktGodkannande,
+} from './systemregister.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
 const SKISS = /^[^/]+\/[^/]+\/input\/scenarier\/[a-z0-9-]+\.yaml$/;
@@ -147,6 +157,7 @@ export function skrivSystem(root, namn, s) {
     else doc.set(nyckel, v);
   };
   satt('titel', s.titel);
+  satt('produkt', s.produkt);
   if (s.organisation) satt('organisation', { namn: s.organisation.namn, ...(s.organisation.hsaId ? { hsaId: s.organisation.hsaId } : {}) });
   satt('andpunkter', s.andpunkter);
   satt('roller', s.roller);
@@ -169,8 +180,25 @@ export function konsumentroller(manifests) {
 }
 
 // En begäran från anslutningsflödet, kontrollerad mot IG:erna.
-function lasBegaran(b, manifests) {
+// Systemets uppgifter i en begäran: namn, titel, produkt och organisation.
+function lasSystemdel(b, root) {
   if (!SYSTEMNAMN.test(b.system || '')) throw new Error('Systemnamnet ska vara bokstäver och siffror, t.ex. VardappY');
+  if (b.produkt && root && !loadProdukter(root).some((p) => p.produkt === b.produkt)) throw new Error(`Produkten ${b.produkt} finns inte`);
+  if (b.organisation?.hsaId && !HSA_ID.test(b.organisation.hsaId)) throw new Error(`Ogiltigt HSA-id ${b.organisation.hsaId}, t.ex. SE2321000099-EXMP`);
+  const organisation = b.organisation?.namn ? { namn: b.organisation.namn, ...(b.organisation.hsaId ? { hsaId: b.organisation.hsaId } : {}) } : undefined;
+  return { system: b.system, titel: b.titel || b.system, ...(b.produkt ? { produkt: b.produkt } : {}), organisation };
+}
+
+// Adressatbegränsning: '*' (alla) eller HSA-id för logiska adressater.
+function lasAdressater(lista) {
+  const a = (lista || []).map((x) => String(x).trim()).filter(Boolean);
+  if (!a.length || a.includes('*')) return null;
+  for (const x of a) if (!HSA_ID.test(x)) throw new Error(`Ogiltig adressat ${x}: ange HSA-id, t.ex. SE2321000099-EXMP, eller * för alla`);
+  return [...new Set(a)];
+}
+
+function lasBegaran(b, manifests, root = null) {
+  const sys = lasSystemdel(b, root);
   if (!b.roller?.length) throw new Error('Välj minst en tjänst att konsumera');
   const roller = b.roller.map((r) => {
     const m = manifests[r.tjanst];
@@ -179,16 +207,16 @@ function lasBegaran(b, manifests) {
     const giltiga = (m.informationsmangder || []).map((i) => i.nyckel);
     const val = r.informationsmangder?.length ? r.informationsmangder : null;
     for (const n of val || []) if (!giltiga.includes(n)) throw new Error(`${n} är ingen informationsmängd i ${r.tjanst}`);
-    return { tjanst: r.tjanst, aktor: r.aktor, ...(val ? { informationsmangder: val } : {}) };
+    const adressater = lasAdressater(r.adressater);
+    return { tjanst: r.tjanst, aktor: r.aktor, ...(val ? { informationsmangder: val } : {}), ...(adressater ? { adressater } : {}) };
   });
-  const organisation = b.organisation?.namn ? { namn: b.organisation.namn, ...(b.organisation.hsaId ? { hsaId: b.organisation.hsaId } : {}) } : undefined;
-  return { sys: { system: b.system, titel: b.titel || b.system, organisation }, roller };
+  return { sys, roller };
 }
 
 // Vad anslutningen skulle ge i testmiljön: behörigheter per roll, scopes,
 // klient-CapabilityStatement och WSO2-plan. Skriver ingenting.
-export function forhandsgranskaAnslutning(b, manifests) {
-  const { sys, roller } = lasBegaran(b, manifests);
+export function forhandsgranskaAnslutning(b, manifests, root = null) {
+  const { sys, roller } = lasBegaran(b, manifests, root);
   const { behorigheter, fel } = behorigheterForSystem(sys, manifests, roller);
   return {
     behorigheter, fel,
@@ -203,8 +231,10 @@ function satAnslutningar(doc, lista) {
   const nod = doc.createNode(lista);
   for (const post of nod.items) {
     for (const k of ['historik', 'bevis']) for (const x of post.get(k, true)?.items || []) x.flow = true;
-    const im = post.get('informationsmangder', true);
-    if (im) im.flow = true;
+    for (const k of ['informationsmangder', 'adressater']) {
+      const n = post.get(k, true);
+      if (n) n.flow = true;
+    }
   }
   doc.set('anslutningar', nod);
 }
@@ -212,36 +242,122 @@ function satAnslutningar(doc, lista) {
 // Testmiljön: rollerna läggs till systemet (som skapas om det inte finns) och
 // varje anslutning i test förs begärd → behörig direkt. Taket kommer från
 // IG:erna; bara konsumentroller kan begäras här.
-export function anslutKlientTest(root, b, manifests, { datum } = {}) {
-  const { sys, roller } = lasBegaran(b, manifests);
-  const { fil, doc, befintlig } = systemDok(root, sys.system);
-  const nu = doc.toJS() || {};
-  if (!befintlig) {
-    doc.set('titel', sys.titel);
-    if (sys.organisation) doc.set('organisation', sys.organisation);
-  }
-  const sysRoller = [...(nu.roller || [])];
-  for (const r of roller) if (!sysRoller.some((x) => x.tjanst === r.tjanst && x.aktor === r.aktor)) sysRoller.push({ tjanst: r.tjanst, aktor: r.aktor });
-  let ansl = nu.anslutningar || [];
-  const av = sys.organisation?.namn || sys.system;
+// Ett nytt system får titel, produkt och organisation; ett befintligt behåller sina.
+function nyttSystem(doc, befintlig, sys) {
+  if (befintlig) return;
+  doc.set('titel', sys.titel);
+  if (sys.produkt) doc.set('produkt', sys.produkt);
+  if (sys.organisation) doc.set('organisation', sys.organisation);
+}
+
+// Begärd → behörig i test för rollerna; befintliga får sina val uppdaterade.
+function behorigITest(ansl, roller, { av, datum }) {
   for (const r of roller) {
     const mal = { tjanst: r.tjanst, aktor: r.aktor, miljo: 'test' };
     const finns = ansl.find((a) => a.miljo === 'test' && a.tjanst === r.tjanst && a.aktor === r.aktor);
     if (finns?.status === 'aterkallad') throw new Error(`${r.aktor} i ${r.tjanst} är återkallad i test; den öppnas inte igen härifrån`);
-    if (!finns) ansl = overga(ansl, mal, 'begard', { av, datum, informationsmangder: r.informationsmangder });
-    else if (r.informationsmangder) ansl = ansl.map((a) => (a === finns ? { ...a, informationsmangder: r.informationsmangder } : a));
+    if (!finns) ansl = overga(ansl, mal, 'begard', { av, datum, informationsmangder: r.informationsmangder, adressater: r.adressater });
+    else {
+      ansl = ansl.map((a) => {
+        if (a !== finns) return a;
+        const { adressater, ...utan } = a;
+        return { ...utan, ...(r.informationsmangder ? { informationsmangder: r.informationsmangder } : {}), ...(r.adressater ? { adressater: r.adressater } : {}) };
+      });
+    }
     if (ansl.find((a) => a.miljo === 'test' && a.tjanst === r.tjanst && a.aktor === r.aktor).status === 'begard') {
       ansl = overga(ansl, mal, 'behorig', { av: 'automatiskt i testmiljön', datum });
     }
   }
+  return ansl;
+}
+
+export function anslutKlientTest(root, b, manifests, { datum } = {}) {
+  const { sys, roller } = lasBegaran(b, manifests, root);
+  const { fil, doc, befintlig } = systemDok(root, sys.system);
+  const nu = doc.toJS() || {};
+  nyttSystem(doc, befintlig, sys);
+  const sysRoller = [...(nu.roller || [])];
+  for (const r of roller) if (!sysRoller.some((x) => x.tjanst === r.tjanst && x.aktor === r.aktor)) sysRoller.push({ tjanst: r.tjanst, aktor: r.aktor });
+  const ansl = behorigITest(nu.anslutningar || [], roller, { av: sys.organisation?.namn || (befintlig ? nu.organisation?.namn : null) || sys.system, datum });
   doc.set('roller', sysRoller);
   satAnslutningar(doc, ansl);
   return skrivDok(root, fil, doc);
 }
 
+// ---- producenter
+
+// Producentroller per tjänst, med informationsmängderna de tillhandahåller.
+export function producentroller(manifests) {
+  return Object.fromEntries(Object.values(manifests).filter((m) => m.ig.roll === 'tjanst').map((m) => [m.ig.id,
+    m.kravprofiler.map((k) => k.aktor).filter((a) => arProducentroll(m, a))
+      .map((a) => ({ aktor: a, informationsmangder: producentMangder(m, a).map((i) => ({ nyckel: i.nyckel, titel: i.titel, krav: i.krav })) }))]));
+}
+
+// En producentbegäran: systemet (med organisation och HSA-id), adressen och rollerna.
+function lasProducentbegaran(root, b, manifests) {
+  const sys = lasSystemdel(b, root);
+  const { doc, befintlig } = systemDok(root, sys.system);
+  const nu = befintlig ? doc.toJS() : {};
+  const organisation = befintlig ? nu.organisation : sys.organisation;
+  if (!organisation?.hsaId) throw new Error('Producenten behöver en organisation med HSA-id');
+  if (!b.roller?.length) throw new Error('Välj minst en tjänst att producera för');
+  for (const r of b.roller) if (!arProducentroll(manifests[r.tjanst] || { informationsmangder: [] }, r.aktor)) throw new Error(`${r.aktor} är ingen producentroll i ${r.tjanst}`);
+  const roller = b.roller.map((r) => ({ tjanst: r.tjanst, aktor: r.aktor, informationsmangder: r.informationsmangder || [] }));
+  return { sys: { ...sys, titel: befintlig ? nu.titel || sys.system : sys.titel, organisation }, nu, befintlig, katalog: nu.nulage?.katalog || STANDARDKATALOG, roller };
+}
+
+export function forhandsgranskaProducentAnslutning(root, b, manifests) {
+  const { sys, katalog, roller } = lasProducentbegaran(root, b, manifests);
+  const r = forhandsgranskaProducent(root, { ...sys, adress: b.adress, roller }, manifests, katalog);
+  const { behorigheter, fel } = behorigheterForSystem(sys, manifests, roller.map((x) => ({ tjanst: x.tjanst, aktor: x.aktor })));
+  return {
+    ...r, katalog, behorigheter, fel,
+    scopes: sammanfogaScopes(behorigheter.flatMap((x) => x.scopes)),
+    wso2: wso2Plan(sys, behorigheter, roller.map((x) => ({ tjanst: x.tjanst, aktor: x.aktor, miljo: 'test', status: 'behorig' })), { miljo: 'test' }),
+  };
+}
+
+// Testmiljön: anslutningspunkt, tjänsteinstans, organisation och medlemskap i
+// testmiljöns katalog; rollerna, adressen och de valda informationsmängderna
+// i systemet; anslutningarna i test begärd → behörig.
+export function anslutProducentTest(root, b, manifests, { datum } = {}) {
+  const { sys, nu, befintlig, katalog, roller } = lasProducentbegaran(root, b, manifests);
+  const reg = registreraProducent(root, { ...sys, adress: b.adress, roller }, manifests, katalog);
+  const { fil, doc } = systemDok(root, sys.system);
+  nyttSystem(doc, befintlig, sys);
+  const sysRoller = [...(nu.roller || [])];
+  for (const r of roller) if (!sysRoller.some((x) => x.tjanst === r.tjanst && x.aktor === r.aktor)) sysRoller.push({ tjanst: r.tjanst, aktor: r.aktor });
+  doc.set('roller', sysRoller);
+  doc.set('andpunkter', [...new Set([...(nu.andpunkter || []), b.adress])]);
+  const mangder = { ...(nu.informationsmangder || {}) };
+  for (const r of roller) {
+    const m = manifests[r.tjanst];
+    const valda = producentMangder(m, r.aktor).filter((i) => i.krav === 'obligatorisk' || r.informationsmangder.includes(i.nyckel)).map((i) => i.nyckel);
+    mangder[r.tjanst] = [...new Set([...(mangder[r.tjanst] || []), ...valda])];
+  }
+  doc.set('informationsmangder', mangder);
+  if (!nu.nulage?.katalog) doc.set('nulage', { ...(nu.nulage || {}), katalog: katalog });
+  const ansl = behorigITest(nu.anslutningar || [], roller.map((r) => ({ tjanst: r.tjanst, aktor: r.aktor })), { av: sys.organisation?.namn || sys.system, datum });
+  satAnslutningar(doc, ansl);
+  return { filer: [skrivDok(root, fil, doc), reg.fil], andringar: reg.andringar };
+}
+
+// Ändra vägval: ny anropsadress i katalogen och i systemet.
+export function bytProducentAdress(root, { system, fran, till }) {
+  const { fil, doc, befintlig } = systemDok(root, system);
+  if (!befintlig) throw new Error(`Systemet ${system} finns inte`);
+  const nu = doc.toJS();
+  const r = bytAdress(root, fran, till, nu.nulage?.katalog || STANDARDKATALOG);
+  doc.set('andpunkter', [...new Set((nu.andpunkter || []).map((a) => (a === fran ? till : a)))]);
+  return { filer: [skrivDok(root, fil, doc), r.fil], antal: r.antal };
+}
+
 // Nästa steg (eller återkallelse) för en anslutning. I testmiljöläget bara i test.
+// I testmiljöläget: alla steg i test, och i produktion bara ansökan.
 export function skrivAnslutningsstatus(root, b, { studiomiljo = null, datum } = {}) {
-  if (studiomiljo === 'test' && b.miljo !== 'test') throw new Error('Testmiljöläget ändrar bara anslutningar i test');
+  if (studiomiljo === 'test' && b.miljo !== 'test' && !(b.miljo === 'prod' && b.status === 'ansokt')) {
+    throw new Error('Testmiljöläget ändrar bara anslutningar i test; i produktion kan det bara ansöka');
+  }
   const { fil, doc, befintlig } = systemDok(root, b.system);
   if (!befintlig) throw new Error(`Systemet ${b.system} finns inte`);
   const ansl = overga(doc.toJS().anslutningar || [], { tjanst: b.tjanst, aktor: b.aktor, miljo: b.miljo }, b.status,
@@ -300,7 +416,8 @@ export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', milj
     const data = viewData(ws, root);
     data.studio = {
       miljo, skisser: skisser(ws, root), konfiguration: konfiguration(ws), andringar: andringar(root), system: loadSystems(root),
-      konsumentroller: konsumentroller(data.manifest),
+      konsumentroller: konsumentroller(data.manifest), producentroller: producentroller(data.manifest),
+      produkter: loadProdukter(root).map(({ fil, ...p }) => p), organisationer: organisationer(root),
     };
     return renderView(data);
   };
@@ -334,7 +451,29 @@ export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', milj
         return json(res, 403, { fel: 'Inte i testmiljöläget: där ansluts klienter, IG:ar och flöden redigeras inte' });
       }
       if (req.method === 'POST' && u.pathname === '/api/anslut/forhandsgranska') {
-        return json(res, 200, forhandsgranskaAnslutning(await kropp(req), loadManifests(loadWorkspace(root))));
+        return json(res, 200, forhandsgranskaAnslutning(await kropp(req), loadManifests(loadWorkspace(root)), root));
+      }
+      if (req.method === 'POST' && u.pathname === '/api/anslut/producent/forhandsgranska') {
+        return json(res, 200, forhandsgranskaProducentAnslutning(root, await kropp(req), loadManifests(loadWorkspace(root))));
+      }
+      if (req.method === 'POST' && u.pathname === '/api/anslut/producent') {
+        if (miljo !== 'test') return json(res, 403, { fel: 'Producenter ansluts i testmiljöläget (studio --miljo test)' });
+        const r = anslutProducentTest(root, await kropp(req), loadManifests(loadWorkspace(root)));
+        return json(res, 200, { fil: r.filer.join(', '), andringar: r.andringar.length, fel: [], varningar: [] });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/producent/adress') {
+        const r = bytProducentAdress(root, await kropp(req));
+        return json(res, 200, { fil: r.filer.join(', '), fel: [], varningar: [] });
+      }
+      const godk = u.pathname.match(/^\/api\/produkt\/([^/]+)\/godkannande$/);
+      if (req.method === 'POST' && godk) {
+        return json(res, 200, { fil: skrivProduktGodkannande(root, decodeURIComponent(godk[1]), await kropp(req), { studiomiljo: miljo }), fel: [], varningar: [] });
+      }
+      if (req.method === 'PUT' && u.pathname.startsWith('/api/produkt/')) {
+        return json(res, 200, { fil: skrivProdukt(root, decodeURIComponent(u.pathname.slice(13)), await kropp(req)), fel: [], varningar: [] });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/organisation') {
+        return json(res, 200, { fil: registreraOrganisation(root, await kropp(req)), fel: [], varningar: [] });
       }
       if (req.method === 'POST' && u.pathname === '/api/anslut') {
         if (miljo !== 'test') return json(res, 403, { fel: 'Klienter ansluts i testmiljöläget (studio --miljo test)' });

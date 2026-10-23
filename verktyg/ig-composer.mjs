@@ -50,6 +50,7 @@ import { anvandningsfallSida, mermaidFranScenario, arbetsflodesSida, mermaidFran
 import { startaStudio } from './studio.mjs';
 import { behorighetFor, behorigheterForRoll, arKonsumentroll } from './behorighet.mjs';
 import { KEDJA, STATUS_TITEL } from './anslutning.mjs';
+import { loadProdukter } from './systemregister.mjs';
 import { registerUrl, publiceraRegister, listaRegister, scenarioFranRegister } from './register.mjs';
 import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
 
@@ -905,9 +906,39 @@ export function loadManifests(ws) {
   return manifest;
 }
 
+// Följsamheten per roll för en systeminstans: produktens godkännande för
+// rollen och om instansens CapabilityStatement anger tjänstens IG (eller
+// rollens förmågor).
+function foljsamhetFor(a, produkt, manifests) {
+  const utan = (u) => String(u).split('|')[0];
+  return a.roller.filter((r) => !r.tillval).map((r) => {
+    const m = manifests[r.tjanst];
+    const ig = m ? `${m.ig.canonical}/ImplementationGuide/${m.ig.id}` : null;
+    const cs = m?.aktorer[r.aktor]?.formagor ? m.formagor[m.aktorer[r.aktor].formagor]?.url : null;
+    const deklarerat = [...a.nulage.implementationGuide, ...a.nulage.instantiates].map(utan);
+    const g = (produkt?.godkannanden || []).find((x) => x.tjanst === r.tjanst && x.aktor === r.aktor) || null;
+    return {
+      roll: r.id, tjanst: r.tjanst, aktor: r.aktor, titel: r.titel, ig,
+      igDeklarerad: a.nulage.finns ? deklarerat.includes(ig) || deklarerat.includes(cs) : null,
+      produktgodkannande: g ? g.status : null,
+      kalla: produkt?.foljsamhet?.kalla || null,
+    };
+  });
+}
+
 export function analyseSystems(ws, root, manifest = loadManifests(ws)) {
   const regler = loadRules(ws).system || {};
-  return loadSystems(root).map((sys) => ({ ...analyseSystem(sys, manifest, root, regler), behorighet: behorighetFor(sys, manifest) }));
+  const produkter = loadProdukter(root);
+  return loadSystems(root).map((sys) => {
+    const produkt = sys.produkt ? produkter.find((p) => p.produkt === sys.produkt) || null : null;
+    const a = analyseSystem(sys, manifest, root, regler);
+    if (sys.produkt && !produkt) a.fel.push(`Produkten ${sys.produkt} finns inte i system/produkter`);
+    return {
+      ...a, produkt: produkt && { id: produkt.produkt, titel: produkt.titel, leverantor: produkt.leverantor || null },
+      foljsamhet: foljsamhetFor(a, produkt, manifest),
+      behorighet: behorighetFor({ ...sys, produktInfo: produkt }, manifest),
+    };
+  });
 }
 
 // Komponerar alla IG:ar i byggordning, utan SUSHI (studions snabba varv).
@@ -947,6 +978,7 @@ export function viewData(ws, root) {
     manifest,
     mermaid: mermaidPerIg(ws),
     system: analyseSystems(ws, root, manifest),
+    produkter: loadProdukter(root).map(({ fil, ...p }) => p),
     // Scopes per tjänsteaktör, ur klientförmågorna i tjänstens IG.
     behorigheter: Object.fromEntries(Object.values(manifest).filter((m) => m.ig.roll === 'tjanst').map((m) => [m.ig.id,
       m.kravprofiler.map((k) => ({ ...behorigheterForRoll(m, k.aktor), konsument: arKonsumentroll(m, k.aktor) }))])),

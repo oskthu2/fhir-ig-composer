@@ -1,5 +1,7 @@
 system: Invanarplattform
 titel: 1177 invånarplattform
+# Produkten som är installerad (system/produkter); systemet är en instans av den.
+produkt: invanarplattform-1177
 organisation:
   namn: Inera AB
   hsaId: SE5565594230-INERA

@@ -1,0 +1,22 @@
+# Produkt: det som installeras hos en eller flera organisationer (CapabilityStatement.software).
+# En produkt utlovar inte följsamhet till Ineras IG:ar, utan anger standarderna den följer.
+produkt: journalsystem-x
+titel: Journalsystem X
+leverantor: Leverantör X AB
+foljer:
+  - { titel: HL7 Sweden basprofiler, paket: hl7se.fhir.base }
+  - { titel: Nationella profiler för tillitsinfrastruktur }
+  - { titel: HL7 Europe Base and Core, paket: hl7.fhir.eu.base }
+# Var följsamheten till tjänsternas roller bor: i registret här, med testrapport.
+foljsamhet:
+  kalla: register
+godkannanden:
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKallsystem
+    status: godkand
+    historik:
+      - { status: ansokt, datum: 2026-05-20, av: Leverantör X AB }
+      - { status: godkand, datum: 2026-06-10, av: Tjänsteägare NPÖ }
+    bevis:
+      - { typ: testrapport, fil: rapport/federation.md, datum: 2026-05-20 }
+      - { typ: beslut, text: Produkten godkänd som NPÖ-källsystem, datum: 2026-06-10 }

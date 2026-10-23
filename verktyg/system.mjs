@@ -63,7 +63,7 @@ function lasNulage(cs) {
       for (const p of [res.profile, ...(res.supportedProfile || [])].filter(Boolean)) x.profiler.add(utan(p));
     }
   }
-  return { lagen, instantiates: cs.instantiates || [], software: cs.software, implementation: cs.implementation };
+  return { lagen, instantiates: cs.instantiates || [], implementationGuide: cs.implementationGuide || [], software: cs.software, implementation: cs.implementation };
 }
 
 // Status för ett API-krav givet en uppsättning delkrav med finns-flaggor.
@@ -356,7 +356,7 @@ export function analyseSystem(sys, manifests, root, regler = {}, kallor = {}) {
     system: sys.system, titel: sys.titel || sys.system, organisation: org, fil: sys.fil,
     andpunkter: sys.andpunkter || [],
     roller: roller.map(({ m, kp, ejValdaTyper, ejValdaProfiler, ejValdaModeller, ...r }) => r),
-    nulage: { finns: !!nulage, fil: sys.nulage?.formaga || null, software: nulage?.software || null, instantiates: nulage?.instantiates || [] },
+    nulage: { finns: !!nulage, fil: sys.nulage?.formaga || null, software: nulage?.software || null, instantiates: nulage?.instantiates || [], implementationGuide: nulage?.implementationGuide || [] },
     api: apiUt, element: elementUt, krav: kravUt, scenarier,
     anslutningar: { forvantade, registrerade, ovantade, finns: !!katalog, organisation: egnaOrg?.ref || null },
     testlista,

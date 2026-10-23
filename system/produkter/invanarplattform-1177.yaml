@@ -1,0 +1,12 @@
+# Produkt: det som installeras hos en eller flera organisationer (CapabilityStatement.software).
+# En produkt utlovar inte följsamhet till Ineras IG:ar, utan anger standarderna den följer.
+produkt: invanarplattform-1177
+titel: 1177 invånarplattform
+leverantor: Inera AB
+foljer:
+  - { titel: HL7 Sweden basprofiler, paket: hl7se.fhir.base }
+  - { titel: Nationella profiler för tillitsinfrastruktur }
+# SaaS: produkten och instansen är samma tjänst, så referensimplementationen är driftmiljön.
+foljsamhet:
+  kalla: referensimplementation
+  adress: https://api.1177.se/fhir

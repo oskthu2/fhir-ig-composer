@@ -102,7 +102,7 @@ const servertyper = (cs) => new Set((cs?.rest || []).filter((r) => r.mode === 's
 const idag = () => new Date().toISOString().slice(0, 10);
 
 // Resurser för T2-katalogerna.
-const t2 = {
+export const t2 = {
   organisation: (id, namn, hsaId) => ({
     resourceType: 'Organization', ...(id ? { id } : {}), meta: { profile: [`${KATALOG_EXT}katalog-organisation`] }, active: true, name: namn,
     ...(hsaId ? { identifier: [{ system: HSA, value: hsaId }] } : {}),

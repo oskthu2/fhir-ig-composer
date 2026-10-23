@@ -13,6 +13,7 @@
 //         miljo: test
 //         status: testad
 //         informationsmangder: [VardkontaktInfo]   # valfritt: smalna av
+//         adressater: [SE2321000099-EXMP]          # valfritt: bara dessa logiska adressater (konsument)
 //         historik:
 //           - { status: begard, datum: 2026-10-23, av: … }
 //         bevis:
@@ -78,6 +79,7 @@ export function overga(anslutningar, mal, ny, opt = {}) {
   const post = {
     tjanst: mal.tjanst, aktor: mal.aktor, miljo: mal.miljo, status: ny,
     ...(opt.informationsmangder?.length ? { informationsmangder: opt.informationsmangder } : nu?.informationsmangder ? { informationsmangder: nu.informationsmangder } : {}),
+    ...(opt.adressater?.length ? { adressater: opt.adressater } : nu?.adressater ? { adressater: nu.adressater } : {}),
     historik: [...(nu?.historik || []), { status: ny, datum, av }],
     ...(allaBevis.length ? { bevis: allaBevis } : {}),
   };

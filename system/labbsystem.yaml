@@ -1,6 +1,8 @@
 # Inget nuläge inlämnat än: kraven och testlistan går att ta fram, men inte gapet.
 system: LabbsystemL
 titel: Labbsystem L
+# Produkten som är installerad (system/produkter); systemet är en instans av den.
+produkt: labbsystem-l
 organisation:
   namn: Labbet L AB
   hsaId: SE5560000001-LABL

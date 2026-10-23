@@ -22,7 +22,7 @@ const utan = (url) => String(url).split('|')[0];
 
 // Serverförmågor per aktör: typ → interaktioner, över aktörens hela kedja av
 // importerade CapabilityStatements.
-function serverformagor(m, aktor) {
+export function serverformagor(m, aktor) {
   const cs = m.aktorer[aktor]?.formagor;
   const ut = new Map();
   if (!cs) return ut;
@@ -132,6 +132,7 @@ export function behorigheterForRoll(m, aktor, valda = null) {
   })).sort((a, b) => Number(a.stodtjanst) - Number(b.stodtjanst) || a.aktor.localeCompare(b.aktor));
   return {
     tjanst: m.ig.id, tjanstTitel: m.ig.titel, version: m.ig.version, aktor, titel: m.aktorer[aktor]?.titel || aktor,
+    ig: `${m.ig.canonical}/ImplementationGuide/${m.ig.id}`,
     formagor: m.aktorer[aktor]?.formagor ? m.formagor[m.aktorer[aktor].formagor].url : null,
     systemInteraktioner: [...system], operationer, mottagare,
     scopes: [...new Set(mottagare.flatMap((x) => x.scopes))].sort(),
@@ -165,8 +166,11 @@ export function klientCapabilityStatement(sys, behorigheter, { miljo = 'test', d
     description: `Genererad av ig-composer ur rollernas klientförmågor: ${behorigheter.map((b) => `${b.titel} i ${b.tjanstTitel}`).join(', ')}.`,
     kind: 'instance',
     instantiates: behorigheter.map((b) => b.formagor && `${b.formagor}|${b.version}`).filter(Boolean),
-    software: { name: sys.titel || sys.system },
-    implementation: { description: `${sys.titel || sys.system} i miljön ${miljo}` },
+    // Instansen anger tjänsternas IG:ar; produkten själv utlovar bara standarderna den följer.
+    implementationGuide: [...new Set(behorigheter.map((b) => `${b.ig}|${b.version}`))],
+    // Produkten (det som installeras) och instansen (installationen hos organisationen).
+    software: { name: sys.produktInfo?.titel || sys.titel || sys.system },
+    implementation: { description: `${sys.titel || sys.system}${sys.organisation?.namn ? ` hos ${sys.organisation.namn}` : ''}, miljön ${miljo}` },
     fhirVersion: '5.0.0',
     format: ['json'],
     rest: [{
@@ -191,7 +195,8 @@ export function behorigheterForSystem(sys, manifests, roller = sys.roller || [])
     const m = manifests[r.tjanst];
     if (!m) { fel.push(`${r.tjanst} saknar komposition.json`); continue; }
     if (!m.kravprofiler.some((k) => k.aktor === r.aktor)) { fel.push(`${r.aktor} är ingen tjänsteaktör i ${r.tjanst}`); continue; }
-    ut.push(behorigheterForRoll(m, r.aktor, r.informationsmangder || null));
+    // adressater: vilka logiska adressater (HSA-id) rollen får anropa; '*' = alla.
+    ut.push({ ...behorigheterForRoll(m, r.aktor, r.informationsmangder || null), adressater: r.adressater?.length ? r.adressater : ['*'] });
   }
   return { behorigheter: ut, fel };
 }
@@ -206,7 +211,7 @@ export function behorighetFor(sys, manifests) {
     const iMiljo = (sys.anslutningar || []).filter((a) => a.miljo === miljo);
     if (!iMiljo.length) continue;
     const { behorigheter, fel } = behorigheterForSystem(sys, manifests,
-      iMiljo.map((a) => ({ tjanst: a.tjanst, aktor: a.aktor, informationsmangder: a.informationsmangder })));
+      iMiljo.map((a) => ({ tjanst: a.tjanst, aktor: a.aktor, informationsmangder: a.informationsmangder, adressater: a.adressater })));
     const giltiga = behorigheter.filter((b) => iMiljo.find((a) => a.tjanst === b.tjanst && a.aktor === b.aktor)?.status !== ATERKALLAD);
     miljoer[miljo] = {
       behorigheter, fel,

@@ -324,20 +324,66 @@ node verktyg/ig-composer.mjs klient JournalX --miljo test      # klient-Capabili
 node verktyg/ig-composer.mjs wso2 JournalX --miljo test        # WSO2-plan → rapport/wso2-JournalX-test.json
 ```
 
+### Produkter, systeminstanser och organisationer
+
+Som i beställningsstödet skiljer registret på **produkten** (det som installeras, t.ex. TakeCare) och **systeminstansen** (installationen hos en organisation). I FHIR motsvarar det `CapabilityStatement.software` och `CapabilityStatement.implementation`.
+
+```yaml
+# system/produkter/journalsystem-x.yaml
+produkt: journalsystem-x
+titel: Journalsystem X
+leverantor: Leverantör X AB
+foljer:                                   # standarder produkten följer
+  - { titel: HL7 Sweden basprofiler, paket: hl7se.fhir.base }
+  - { titel: Nationella profiler för tillitsinfrastruktur }
+  - { titel: HL7 Europe Base and Core, paket: hl7.fhir.eu.base }
+foljsamhet:
+  kalla: register                         # eller referensimplementation + adress
+godkannanden:                             # produktgodkännande per roll
+  - { tjanst: inera.tjanst.npo, aktor: NPOKallsystem, status: godkand, … }
+```
+
+En produkt utlovar inte följsamhet till Ineras IG:ar. Den anger de standarder den följer: svenska basprofiler, tillitsinfrastrukturens profiler och europeiska profiler. Följsamheten till en tjänsteroll bor på ett av två ställen:
+
+- **Referensimplementation** hos leverantören: en adress som går att testa mot rollens krav. Passar SaaS och molntjänster.
+- **Registret** hos Inera: följsamheten registreras här, med en testrapport som underlag.
+
+Leverantören ansöker om **produktgodkännande** per roll (ansökt → godkänd, som kräver ett beslut; kan återkallas). Kundernas instanser anger tjänstens IG i sitt `CapabilityStatement` (`implementationGuide`, eller `instantiates` med rollens förmågor). Systemvyns flik *Anslutningar per miljö* visar per roll produktens godkännande och om instansens nuläge anger IG:n. Klient-`CapabilityStatement` som verktyget genererar får tjänsternas IG:ar i `implementationGuide`.
+
+Systeminstanser pekar på produkten med `produkt:`. Organisationer finns som `Organization` med HSA-id i federationsmedlemskatalogen.
+
+### Från beställningsstödet till T2
+
+| Beställningsstödet (NTjP) | Här |
+|---|---|
+| Administrera systeminformation, Lägg till nytt system, Lägg till ny organisation | Systeminstans (`system/*.yaml`), produkt (`system/produkter/`), organisation i katalogen |
+| Skapa/ta bort vägval | *Anslut producent (test)*: anslutningspunkt (`Endpoint`) med de specifikationer den implementerar, tjänsteinstans, organisation och medlemskap i testmiljöns katalog |
+| Ändra vägval | *Byt adress* på anslutningspunkten. I drift gör producenten det själv, med scopet `Endpoint.u`. |
+| Hantera behörigheter (adresseringsbehörighet) | *Anslut klient (test)*: scopes i åtkomstintyget, valfritt begränsade till vissa logiska adressater (HSA-id) |
+| Mina beställningar | *Mina anslutningar*: status per organisation; begärd och ansökt är skickade |
+| Aktivera/avaktivera systeminstans | *Återkalla* anslutningen |
+| Test- och produktionsportal | Studion i testmiljöläge och den vanliga studion (*Anslutningar att godkänna*) |
+
+Vägvalet försvinner som central konfiguration. I T2 hittar konsumenten producenterna via engagemangsindex och tjänstekatalog, och producenten äger sin anslutningspunkt. Det som beställs och godkänns är anslutningen och behörigheten.
+
+**Adressatbegränsning.** En konsumentanslutning kan begränsas till vissa logiska adressater (`adressater: [SE2321000099-EXMP]`, annars alla). Begränsningen följer med i åtkomstintyget som anspråket `adressater` och kontrolleras av producenten; WSO2 begränsar inte per adressat. Det är ett policybeslut om den ska användas.
+
 ### Studion i testmiljöläge: Anslut klient (test)
 
 ```sh
 node verktyg/ig-composer.mjs studio --miljo test --port 4901  # eller STUDIO_MILJO=test
 ```
 
-Testmiljöläget är studion för den som ansluter en klient. Där finns *＋ Anslut klient (test)*:
+Testmiljöläget är studion för den som ansluter ett system, med samma menyer som beställningsstödet: *Anslut klient (test)*, *Anslut producent (test)*, *Mina anslutningar*, *Lägg till nytt system (produkt)* och *Lägg till ny organisation*. Klienten ansluts så här:
 
 1. Välj ett befintligt system eller ange ett nytt (namn, titel, organisation, HSA-id).
 2. Välj tjänsterna att konsumera. Bara konsumentroller (klient- men inga serverförmågor) är valbara. Informationsmängder kan väljas bort.
 3. Granska scopen per mottagare, klient-`CapabilityStatement` (går att ladda ned) och WSO2-planen.
 4. *Begär testbehörighet*: rollerna läggs till systemet och anslutningarna i test förs begärd → behörig direkt.
 
-Nästa steg, *testad*, tas i fliken *Anslutningar per miljö* med en testrapport som bevis. I testmiljöläget går det bara att skriva anslutningar i test; IG:ar, flöden och systemens roller i övrigt redigeras inte, och produktionsanslutningar ändras i den vanliga studion.
+Producenten ansluts på samma sätt: system, tjänster med informationsmängder (obligatoriska ingår alltid) och anropsadress. Förhandsgranskningen visar vad som skapas eller utökas i testmiljöns katalog, den som den mockade federationen laddar (`system/nulage/t2-katalog.json`). Efter registreringen visar fliken *T2-registreringar* att förutsättningarna är uppfyllda, och `federation testa` kör mot de nya anslutningspunkterna.
+
+Nästa steg, *testad*, tas i fliken *Anslutningar per miljö* med en testrapport som bevis, och därefter *Ansök om produktion*. I testmiljöläget kan man bara skriva anslutningar i test och ansöka om produktion, och leverantörer kan bara ansöka om produktgodkännande. Godkännanden görs i den vanliga studion, under *Anslutningar att godkänna* respektive på produkten. IG:ar, flöden och systemens roller i övrigt redigeras inte i testmiljöläget.
 
 ## Flöden: en styrande källa, två diagram
 
@@ -410,7 +456,8 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 │   ├── npo/                   inera.tjanst.npo         (tjänst, publik)   – SVOD × Patientöversikt
 │   ├── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
 │   └── po-t2/                 inera.tjanst.pot2        (tjänst, publik)   – Patientöversiktsfederationen × Patientöversikt (T2)
-├── system/                    konkreta system: roller, tillval, informationsmängder, ändpunkter, nuläge och anslutningar per miljö
+├── system/                    systeminstanser: produkt, roller, tillval, informationsmängder, ändpunkter, nuläge och anslutningar per miljö
+│   ├── produkter/             produkter: standarder de följer, följsamhetens källa och produktgodkännanden
 │   └── nulage/                CapabilityStatement (kind=instance) och T2-katalogerna
 ├── miljoer/                   verkliga T2-realiseringar för läsadaptern (infopeak.yaml)
 ├── externa/                   ögonblicksbilder av externa specifikationer (CC0)

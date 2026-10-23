@@ -1,0 +1,18 @@
+# Produkt: det som installeras hos en eller flera organisationer (CapabilityStatement.software).
+# En produkt utlovar inte följsamhet till Ineras IG:ar, utan anger standarderna den följer.
+produkt: primarvardssystem-p
+titel: Primärvårdssystem P
+leverantor: Leverantör P AB
+foljer:
+  - { titel: HL7 Sweden basprofiler, paket: hl7se.fhir.base }
+  - { titel: Nationella profiler för tillitsinfrastruktur }
+# Följsamheten bor i leverantörens referensimplementation (molntjänst), som går att testa.
+foljsamhet:
+  kalla: referensimplementation
+  adress: https://ref.leverantor-p.se/fhir
+godkannanden:
+  - tjanst: inera.tjanst.pot2
+    aktor: POT2Producent
+    status: ansokt
+    historik:
+      - { status: ansokt, datum: 2026-10-15, av: Leverantör P AB }

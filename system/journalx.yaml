@@ -2,6 +2,8 @@
 # summerar kraven över rollerna och jämför med nuläget.
 system: JournalX
 titel: Journalsystem X
+# Produkten som är installerad (system/produkter); systemet är en instans av den.
+produkt: journalsystem-x
 organisation:
   namn: Region Exempel
   hsaId: SE2321000099-EXMP

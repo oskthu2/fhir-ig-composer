@@ -1,5 +1,7 @@
 system: PrimarvardP
 titel: Primärvårdssystem P
+# Produkten som är installerad (system/produkter); systemet är en instans av den.
+produkt: primarvardssystem-p
 organisation:
   namn: Region Exempel
   hsaId: SE2321000099-EXMP

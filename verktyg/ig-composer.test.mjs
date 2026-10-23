@@ -18,6 +18,8 @@ import { parseFsh, expandRules } from './fsh.mjs';
 import { behorigheterForRoll, behorigheterForSystem, klientCapabilityStatement, arKonsumentroll, sammanfogaScopes } from './behorighet.mjs';
 import { overga, nastaStatus } from './anslutning.mjs';
 import { wso2Plan } from './wso2.mjs';
+import { forhandsgranskaAnslutning, forhandsgranskaProducentAnslutning, anslutProducentTest, bytProducentAdress } from './studio.mjs';
+import { loadProdukter, skrivProdukt, skrivProduktGodkannande, registreraOrganisation, organisationer } from './systemregister.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ws = loadWorkspace(root);
@@ -778,8 +780,9 @@ test('studion i testmiljöläge: anslut klient, bara test, ingen redigering', as
     fs.mkdirSync(path.join(dir, 'rapport'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'rapport', 'test.md'), '# test\n');
     assert.equal((await status(test, { miljo: 'test', status: 'testad', bevis: [{ typ: 'testrapport', fil: 'rapport/test.md' }] })).status, 200);
-    assert.equal((await status(test, { miljo: 'prod', status: 'ansokt' })).status, 400, 'testläget rör inte produktion');
-    assert.equal((await status(vanlig, { miljo: 'prod', status: 'ansokt' })).status, 200);
+    assert.equal((await status(test, { miljo: 'prod', status: 'ansokt' })).status, 200, 'testläget kan ansöka om produktion');
+    assert.equal((await status(test, { miljo: 'prod', status: 'godkand', bevis: [{ typ: 'beslut', text: 'ok' }] })).status, 400, 'men inte godkänna');
+    assert.equal((await status(vanlig, { miljo: 'prod', status: 'godkand', bevis: [{ typ: 'beslut', text: 'ok' }] })).status, 200);
     const text = fs.readFileSync(path.join(dir, 'system', 'vardapp-y.yaml'), 'utf8');
     assert.match(text, /- \{ status: testad, datum: [0-9-]+, av: studio \(test\) \}/, 'historiken skrivs en rad per post');
   } finally {
@@ -787,4 +790,98 @@ test('studion i testmiljöläge: anslut klient, bara test, ingen redigering', as
     vanlig.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------- systemregistret: produkter, producenter, adressater
+
+test('anslut producent (test): anslutningspunkt, tjänsteinstans, organisation och medlemskap i testmiljöns katalog', () => {
+  const dir = kopieraArbetsyta();
+  try {
+    const manifests = loadManifests(loadWorkspace(dir));
+    const begaran = {
+      system: 'VardsystemY', titel: 'Vårdsystem Y', produkt: 'journalsystem-x', organisation: { namn: 'Region Y', hsaId: 'SE2321000123-REGY' },
+      adress: 'https://fhir.y.se/r5', roller: [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKallsystem', informationsmangder: ['FastKontaktInfo'] }],
+    };
+    const f = forhandsgranskaProducentAnslutning(dir, begaran, manifests);
+    assert.deepEqual(f.andringar.map((a) => `${a.atgard} ${a.resurs.resourceType}`), ['skapa Organization', 'skapa OrganizationAffiliation', 'skapa Endpoint', 'skapa CapabilityStatement']);
+    assert.ok(f.scopes.includes('system/Endpoint.cu'), 'producenten registrerar själv i drift');
+    assert.throws(() => forhandsgranskaProducentAnslutning(dir, { ...begaran, roller: [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument' }] }, manifests), /ingen producentroll/);
+    assert.throws(() => forhandsgranskaProducentAnslutning(dir, { ...begaran, adress: 'ftp://x' }, manifests), /http/);
+    anslutProducentTest(dir, begaran, manifests);
+    const sys = loadSystems(dir).find((s) => s.system === 'VardsystemY');
+    assert.equal(sys.produkt, 'journalsystem-x');
+    assert.deepEqual(sys.andpunkter, ['https://fhir.y.se/r5']);
+    assert.deepEqual(sys.informationsmangder['inera.tjanst.npo'].sort(), ['FastKontaktInfo', 'VardkontaktInfo']);
+    assert.deepEqual(sys.anslutningar.map((a) => [a.aktor, a.miljo, a.status]), [['NPOKallsystem', 'test', 'behorig']]);
+    // Systemanalysen ser registreringarna i katalogen.
+    const a = analyseSystems(loadWorkspace(dir), dir).find((x) => x.system === 'VardsystemY');
+    assert.ok(a.anslutningar.forvantade.length >= 3);
+    assert.ok(a.anslutningar.forvantade.every((x) => x.status === 'registrerad'), JSON.stringify(a.anslutningar.forvantade.map((x) => [x.typ, x.status])));
+    assert.equal(a.produkt.titel, 'Journalsystem X');
+    // Igen: inget nytt skapas.
+    assert.deepEqual(forhandsgranskaProducentAnslutning(dir, begaran, manifests).andringar, []);
+    // Ändra vägval.
+    bytProducentAdress(dir, { system: 'VardsystemY', fran: 'https://fhir.y.se/r5', till: 'https://fhir2.y.se/r5' });
+    const k = JSON.parse(fs.readFileSync(path.join(dir, 'system', 'nulage', 't2-katalog.json'), 'utf8'));
+    assert.equal(k.entry.find((e) => e.resource.id === 'ep-vardsystem-y').resource.address, 'https://fhir2.y.se/r5');
+    assert.deepEqual(loadSystems(dir).find((s) => s.system === 'VardsystemY').andpunkter, ['https://fhir2.y.se/r5']);
+    assert.throws(() => bytProducentAdress(dir, { system: 'VardsystemY', fran: 'https://finns.inte', till: 'https://x.se' }), /Ingen anslutningspunkt/);
+    // Organisationer.
+    assert.throws(() => registreraOrganisation(dir, { namn: 'Region Y', hsaId: 'SE2321000123-REGY' }), /finns redan/);
+    assert.throws(() => registreraOrganisation(dir, { namn: 'X', hsaId: 'fel' }), /Ogiltigt HSA-id/);
+    registreraOrganisation(dir, { namn: 'Region Z', hsaId: 'SE2321000124-REGZ' });
+    assert.ok(organisationer(dir).some((o) => o.hsaId === 'SE2321000124-REGZ'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('produkter: standarder, följsamhetens källa och produktgodkännande per roll', () => {
+  const dir = kopieraArbetsyta();
+  try {
+    skrivProdukt(dir, 'takecare', { titel: 'TakeCare', leverantor: 'CGM', foljer: [{ titel: 'HL7 Sweden basprofiler', paket: 'hl7se.fhir.base' }] });
+    const p = () => loadProdukter(dir).find((x) => x.produkt === 'takecare');
+    assert.deepEqual(p().foljer, [{ titel: 'HL7 Sweden basprofiler', paket: 'hl7se.fhir.base' }]);
+    const mal = { tjanst: 'inera.tjanst.npo', aktor: 'NPOKallsystem' };
+    assert.throws(() => skrivProduktGodkannande(dir, 'takecare', { ...mal, status: 'ansokt' }), /var följsamheten bor/);
+    assert.throws(() => skrivProdukt(dir, 'takecare', { titel: 'TakeCare', foljsamhet: { kalla: 'referensimplementation' } }), /adress/);
+    skrivProdukt(dir, 'takecare', { titel: 'TakeCare', foljsamhet: { kalla: 'register' } });
+    assert.throws(() => skrivProduktGodkannande(dir, 'takecare', { ...mal, status: 'ansokt' }), /testrapport/);
+    fs.mkdirSync(path.join(dir, 'rapport'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'rapport', 'tc.md'), '# test\n');
+    skrivProduktGodkannande(dir, 'takecare', { ...mal, status: 'ansokt', bevis: [{ typ: 'testrapport', fil: 'rapport/tc.md' }] }, { studiomiljo: 'test' });
+    assert.throws(() => skrivProduktGodkannande(dir, 'takecare', { ...mal, status: 'godkand', bevis: [{ typ: 'beslut', text: 'ok' }] }, { studiomiljo: 'test' }), /bara ansöka/);
+    assert.throws(() => skrivProduktGodkannande(dir, 'takecare', { ...mal, status: 'godkand' }), /beslut/);
+    skrivProduktGodkannande(dir, 'takecare', { ...mal, status: 'godkand', bevis: [{ typ: 'beslut', text: 'ok' }] });
+    assert.deepEqual(p().godkannanden.map((g) => [g.aktor, g.status, g.historik.length]), [['NPOKallsystem', 'godkand', 2]]);
+    assert.equal(p().leverantor, undefined, 'leverantören tas bort när den inte anges');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('följsamhet per instans: produktgodkännande och tjänstens IG i CapabilityStatement', () => {
+  const a = Object.fromEntries(analyseSystems(loadWorkspace(root), root).map((x) => [x.system, x]));
+  const f = (s, aktor) => a[s].foljsamhet.find((x) => x.aktor === aktor);
+  assert.equal(f('JournalX', 'NPOKallsystem').produktgodkannande, 'godkand');
+  assert.equal(f('JournalX', 'NPOKallsystem').kalla, 'register');
+  assert.equal(f('PrimarvardP', 'POT2Producent').produktgodkannande, 'ansokt');
+  assert.equal(f('LabbsystemL', 'Journal1177KallsystemFiltrerande').igDeklarerad, null, 'inget nuläge');
+  const cs = a.JournalX.behorighet.miljoer.test.klientCs;
+  assert.ok(cs.implementationGuide.includes('https://fhir.inera.se/ig/npo/ImplementationGuide/inera.tjanst.npo|0.1.0'));
+  assert.equal(cs.software.name, 'Journalsystem X');
+});
+
+test('adressatbegränsning: bara HSA-id eller alla, följer med till behörigheter och WSO2-planen', () => {
+  const manifests = loadManifests(loadWorkspace(root));
+  const roll = { tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument' };
+  assert.throws(() => forhandsgranskaAnslutning({ system: 'VardappY', roller: [{ ...roll, adressater: ['region'] }] }, manifests), /Ogiltig adressat/);
+  const alla = forhandsgranskaAnslutning({ system: 'VardappY', roller: [{ ...roll, adressater: ['*'] }] }, manifests);
+  assert.deepEqual(alla.behorigheter[0].adressater, ['*']);
+  const f = forhandsgranskaAnslutning({ system: 'VardappY', roller: [{ ...roll, adressater: ['SE2321000099-EXMP'] }] }, manifests);
+  assert.deepEqual(f.behorigheter[0].adressater, ['SE2321000099-EXMP']);
+  assert.deepEqual(f.wso2.prenumerationer[0].adressater, ['SE2321000099-EXMP']);
+  assert.ok(f.wso2.anmarkningar.some((x) => /adressater/.test(x)));
+  const a = overga([], { ...roll, miljo: 'test' }, 'begard', { adressater: ['SE2321000099-EXMP'] });
+  assert.deepEqual(a[0].adressater, ['SE2321000099-EXMP']);
 });
