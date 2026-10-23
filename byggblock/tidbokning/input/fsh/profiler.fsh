@@ -30,6 +30,8 @@ Description: "En bokad tid för en patient."
 * participant MS
 * serviceType MS
 * slot MS
+// R5-kärnan binder class till THO:s EncounterClass, som inte finns i THO 7; samma koder finns i v3-ActEncounterCode.
+* class from http://terminology.hl7.org/ValueSet/v3-ActEncounterCode (preferred)
 * start insert Obligation(#SHALL:populate, TidBokningstjanst)
 * subject insert Obligation(#SHALL:populate, TidBokningstjanst)
 * slot insert Obligation(#SHALL:populate, TidBokningstjanst)
