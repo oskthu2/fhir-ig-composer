@@ -17,7 +17,8 @@
     },
     "ghcr.io/devcontainers/features/ruby:1": {}
   },
-  "postCreateCommand": "npm ci --prefix verktyg && gem install jekyll --no-document && (node verktyg/ig-composer.mjs bygg || true)",
+  "postCreateCommand": "npm ci --prefix verktyg && touch /tmp/studio-klar && gem install jekyll --no-document && (node verktyg/ig-composer.mjs bygg || true)",
+  "postStartCommand": "touch /tmp/studio-klar",
   "forwardPorts": [
     4900,
     4901,

@@ -1,7 +1,11 @@
 # Tillägg för devcontainern: arbetsytan monteras från repot, och studion
 # körs som containerns egen process. Den väntar tills postCreateCommand har
-# installerat verktygets beroenden och startas om om den avslutas. Med
-# node --watch startar den också om när verktygets moduler ändras (git pull).
+# installerat verktygets beroenden och startas om om den avslutas.
+# Markören /tmp/studio-klar sätts efter npm ci i postCreateCommand och vid
+# varje start (postStartCommand). Utan den startade studion på förra
+# containerns node_modules, och npm ci tog bort dem under den: node --watch
+# kraschade då och väntade på en filändring som aldrig kom.
+# Med node --watch startar studion också om när verktygets moduler ändras.
 # Loggen finns i /tmp/studio.log. Studion i testmiljöläge körs i samma
 # container på port 4901, med loggen i /tmp/studio-test.log.
 # Uppdatera allt: npm run uppdatera (eller node verktyg/ig-composer.mjs uppdatera).
@@ -16,13 +20,13 @@ services:
       - -c
       - |
         while true; do
-          if [ -d verktyg/node_modules/yaml ]; then
+          if [ -f /tmp/studio-klar ] && [ -d verktyg/node_modules/yaml ]; then
             node --watch verktyg/ig-composer.mjs studio --miljo test --port 4901 >> /tmp/studio-test.log 2>&1
           fi
           sleep 5
         done &
         while true; do
-          if [ -d verktyg/node_modules/yaml ]; then
+          if [ -f /tmp/studio-klar ] && [ -d verktyg/node_modules/yaml ]; then
             node --watch verktyg/ig-composer.mjs studio >> /tmp/studio.log 2>&1
           fi
           sleep 5
