@@ -19,6 +19,7 @@ import { behorigheterForRoll, behorigheterForSystem, klientCapabilityStatement, 
 import { overga, nastaStatus } from './anslutning.mjs';
 import { wso2Plan } from './wso2.mjs';
 import { forhandsgranskaAnslutning, forhandsgranskaProducentAnslutning, anslutProducentTest, bytProducentAdress } from './studio.mjs';
+import { referensroller, startaReferens, testaReferens, renderProdukttest } from './produkttest.mjs';
 import { loadProdukter, skrivProdukt, skrivProduktGodkannande, registreraOrganisation, organisationer } from './systemregister.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -884,4 +885,30 @@ test('adressatbegränsning: bara HSA-id eller alla, följer med till behörighet
   assert.ok(f.wso2.anmarkningar.some((x) => /adressater/.test(x)));
   const a = overga([], { ...roll, miljo: 'test' }, 'begard', { adressater: ['SE2321000099-EXMP'] });
   assert.deepEqual(a[0].adressater, ['SE2321000099-EXMP']);
+});
+
+test('federationstest mot produktens referensimplementation: live-adress, producentroller, ej nåbar', async () => {
+  const w = loadWorkspace(root);
+  const manifests = loadManifests(w);
+  const produkt = loadProdukter(root).find((p) => p.produkt === 'primarvardssystem-p');
+  const { roller, ejTestbara } = referensroller(produkt, manifests, ['inera.tjanst.pot2#POT2Producent', 'inera.tjanst.pot2#POT2Visning']);
+  assert.deepEqual(roller.map((r) => r.aktor), ['POT2Producent']);
+  assert.match(ejTestbara[0].orsak, /klientroll/);
+  const regler = rules.system || {};
+  const ref = await startaReferens({ ws: w, manifests, roller });
+  try {
+    const r = await testaReferens({ ws: w, manifests, root, regler, produkt, adress: ref.url, roller, ejTestbara });
+    assert.equal(r.nabar, true);
+    assert.equal(r.status, 'godkänt', JSON.stringify(r.korningar));
+    assert.ok(r.korningar.some((k) => k.forutsattning) && r.korningar.some((k) => !k.forutsattning));
+    // Konsumentstegen gick till referensimplementationens verkliga adress.
+    const logg = JSON.stringify(ref.mock.andpunkter.get('/fhir').logg);
+    for (const typ of ['Condition', 'MedicationStatement', 'Flag']) assert.match(logg, new RegExp(typ));
+    assert.match(renderProdukttest(r), /status: \*\*godkänt\*\*/);
+  } finally {
+    await ref.mock.stoppa();
+  }
+  const borta = await testaReferens({ ws: w, manifests, root, regler, produkt, adress: 'http://127.0.0.1:9/fhir', roller });
+  assert.equal(borta.status, 'ej nåbar');
+  assert.equal(borta.nabar, false);
 });

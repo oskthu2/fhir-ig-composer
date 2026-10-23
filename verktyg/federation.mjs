@@ -66,7 +66,7 @@ const stangning = (m, namn, seen = new Set()) => {
 
 // CapabilityStatement (kind=instance) som kan summan av server-kraven i en
 // förmåga och allt den importerar.
-function instansCs(m, csNamn, titel, url) {
+export function instansCs(m, csNamn, titel, url) {
   const resurser = new Map();
   const system = new Set();
   for (const n of stangning(m, csNamn)) {
@@ -185,6 +185,12 @@ export async function byggFederation({ ws, manifests, systems, root, port = 0 })
   // Systemen: kan exakt det deras nuläge säger. Data = exemplen från de tjänster
   // där systemet har en roll, för de resurstyper det själv säger att det har.
   for (const sys of systems) {
+    // Ett system som körs live (t.ex. en leverantörs referensimplementation)
+    // mockas inte: testet anropar dess verkliga adress.
+    if (sys.live) {
+      plats.system.set(sys.system, sys.andpunkter[0]);
+      continue;
+    }
     const sokvag = `/system/${sys.system}`;
     const url = mock.url(sokvag);
     const fil = sys.nulage?.formaga && path.join(root, 'system', sys.nulage.formaga);

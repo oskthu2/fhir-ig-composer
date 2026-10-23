@@ -1825,6 +1825,7 @@ function ritaProdukt(p, id) {
       : el('p', { class: 'tom' }, 'Inte angiven. Ange källan innan leverantören ansöker om godkännande.'),
     el('h3', {}, 'Produktgodkännanden')].filter(Boolean));
   ritaProduktgodkannanden(p, x);
+  ritaProdukttest(p, x);
   p.append(el('h3', {}, 'Instanser'));
   if (!inst.length) return p.append(el('p', { class: 'tom' }, 'Inga instanser.'));
   p.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' },
@@ -1845,6 +1846,35 @@ const produktUtkast = (x) => ({
   kalla: x.foljsamhet?.kalla || '', adress: x.foljsamhet?.adress || '', befintlig: true,
 });
 const PRODUKTSTATUS = { ansokt: 'ansökt', godkand: 'godkänd', aterkallad: 'återkallad' };
+
+// Federationstestet mot referensimplementationen: senaste körningen och, i
+// studion, en ny körning (mot produktens adress eller en annan, t.ex. lokal).
+const PRODUKTTEST = { 'godkänt': 'ok', brister: 'delvis', 'ej nåbar': 'saknas', 'inga roller': 'saknas' };
+function ritaProdukttest(p, x) {
+  const t = DATA.produkttester?.[x.produkt];
+  const ref = x.foljsamhet?.kalla === 'referensimplementation';
+  if (!ref && !t) return;
+  p.append(...[el('h3', {}, 'Federationstest mot referensimplementationen'),
+    el('p', { class: 'svag liten' }, 'Testet registrerar referensimplementationen som producent i den mockade federationen (förutsättningarna) och kör tjänstens användningsfall som konsument mot leverantörens adress. Klientroller prövas inte här. Referensimplementationen behöver godta testfederationens åtkomstintyg.'),
+    t ? el('div', {},
+      el('p', {}, el('span', { class: `status ${PRODUKTTEST[t.status] || ''}` }, t.status), ' ', el('span', { class: 'mono liten' }, t.adress), el('span', { class: 'svag liten' }, ` · ${new Date(t.genererad).toLocaleString('sv-SE')}`),
+        t.rapport ? el('span', { class: 'svag liten' }, ' · rapport ', el('code', {}, t.rapport)) : null),
+      t.fel ? el('p', { class: 'nej liten' }, t.fel) : null,
+      t.korningar.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+        el('thead', {}, el('tr', {}, ['Användningsfall', 'Roll', 'Status'].map((h) => el('th', {}, h)))),
+        el('tbody', {}, t.korningar.map((k) => el('tr', {},
+          el('td', {}, k.titel, k.forutsattning ? el('span', { class: 'svag liten' }, ' · förutsättning') : null),
+          el('td', {}, prick(k.tjanst), ' ', M[k.tjanst]?.aktorer[k.roll.split('#')[1]]?.titel || k.roll),
+          el('td', {}, statusEl(k.status))))))) : null,
+      t.ejTestbara?.length ? el('p', { class: 'svag liten' }, 'Testas inte här: ', t.ejTestbara.map((e) => `${e.aktor} (${e.orsak})`).join('; ')) : null)
+      : el('p', { class: 'tom' }, 'Inte körd ännu.'),
+    STUDIO ? (() => {
+      let adress = '';
+      return el('div', { class: 'knapprad' },
+        el('button', { class: 'knapp primar', onclick: (e) => spara(e.target, 'POST', `/api/produkt/${encodeURIComponent(x.produkt)}/testa`, adress ? { adress } : {}, { vy: 'produkt', id: x.produkt }) }, 'Kör federationstestet'),
+        falt({ placeholder: ref ? `annan adress än ${x.foljsamhet.adress}, t.ex. http://localhost:4810/fhir` : 'referensimplementationens adress', style: 'max-width:440px' }, '', (v) => { adress = v.trim(); }));
+    })() : null].filter(Boolean));
+}
 
 // Produktgodkännanden per roll, med ansökan och beslut i studion.
 function ritaProduktgodkannanden(p, x) {
@@ -1885,7 +1915,10 @@ function ritaProduktgodkannanden(p, x) {
       if (!u.roll) return e.target.after(el('div', { class: 'meddelande nej' }, 'Välj en roll.'));
       if (register && !u.testrapport) return e.target.after(el('div', { class: 'meddelande nej' }, 'Ange testrapporten.'));
       const [tjanst, aktor] = u.roll.split('#');
-      skicka(e.target, tjanst, aktor, 'ansokt', register ? [{ typ: 'testrapport', fil: u.testrapport }] : []);
+      // Med referensimplementation följer en godkänd körning med som testrapport.
+      const t = DATA.produkttester?.[x.produkt];
+      const kord = !register && t?.status === 'godkänt' && t.rapport && t.roller.some((r) => `${r.tjanst}#${r.aktor}` === u.roll);
+      skicka(e.target, tjanst, aktor, 'ansokt', register ? [{ typ: 'testrapport', fil: u.testrapport }] : kord ? [{ typ: 'testrapport', fil: t.rapport }] : []);
     } }, 'Ansök')));
 }
 

@@ -29,4 +29,5 @@ rapport/
 # Federationstestet genereras av ig-composer federation testa
 federation.json
 federation-*.json
+produkttest-*.json
 **/Requirements-fromNarrative.json

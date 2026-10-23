@@ -20,6 +20,7 @@
 //   POST /api/producent/adress     { system, fran, till }  byt anropsadress (ändra vägval)
 //   PUT  /api/produkt/<id>         { titel, leverantor, foljer, foljsamhet }  lägg till eller ändra en produkt
 //   POST /api/produkt/<id>/godkannande { tjanst, aktor, status, bevis }  produktgodkännande per roll
+//   POST /api/produkt/<id>/testa   { adress?, roller? }  federationstest mot referensimplementationen
 //   POST /api/organisation         { namn, hsaId }         lägg till en organisation i katalogen
 //
 // Testmiljöläge (studio --miljo test): studion för den som ansluter en klient.
@@ -35,6 +36,7 @@ import { loadSystems } from './system.mjs';
 import { overga } from './anslutning.mjs';
 import { behorigheterForSystem, klientCapabilityStatement, arKonsumentroll, sammanfogaScopes } from './behorighet.mjs';
 import { wso2Plan } from './wso2.mjs';
+import { referensroller, testaReferens, skrivProdukttest } from './produkttest.mjs';
 import {
   loadProdukter, skrivProdukt, organisationer, registreraOrganisation, registreraProducent, forhandsgranskaProducent,
   producentMangder, arProducentroll, bytAdress, STANDARDKATALOG, HSA_ID, skrivProduktGodkannande,
@@ -464,6 +466,20 @@ export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', milj
       if (req.method === 'POST' && u.pathname === '/api/producent/adress') {
         const r = bytProducentAdress(root, await kropp(req));
         return json(res, 200, { fil: r.filer.join(', '), fel: [], varningar: [] });
+      }
+      const testa = u.pathname.match(/^\/api\/produkt\/([^/]+)\/testa$/);
+      if (req.method === 'POST' && testa) {
+        const b = await kropp(req);
+        const ws = loadWorkspace(root);
+        const manifests = loadManifests(ws);
+        const produkt = loadProdukter(root).find((p) => p.produkt === decodeURIComponent(testa[1]));
+        if (!produkt) return json(res, 400, { fel: `Produkten ${testa[1]} finns inte` });
+        const adress = b.adress || (produkt.foljsamhet?.kalla === 'referensimplementation' ? produkt.foljsamhet.adress : null);
+        if (!/^https?:\/\/\S+$/.test(adress || '')) return json(res, 400, { fel: 'Ange referensimplementationens adress' });
+        const { roller, ejTestbara } = referensroller(produkt, manifests, b.roller || []);
+        if (!roller.length) return json(res, 400, { fel: 'Inga producentroller att testa: ansök om produktgodkännande för en roll först' });
+        const r = await testaReferens({ ws, manifests, root, regler: verktyg.loadRules?.(ws).system || {}, produkt, adress, roller, ejTestbara });
+        return json(res, 200, { fil: skrivProdukttest(root, r), status: r.status, fel: r.fel ? [r.fel] : [], varningar: [] });
       }
       const godk = u.pathname.match(/^\/api\/produkt\/([^/]+)\/godkannande$/);
       if (req.method === 'POST' && godk) {

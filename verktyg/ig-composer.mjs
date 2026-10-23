@@ -51,6 +51,7 @@ import { startaStudio } from './studio.mjs';
 import { behorighetFor, behorigheterForRoll, arKonsumentroll } from './behorighet.mjs';
 import { KEDJA, STATUS_TITEL } from './anslutning.mjs';
 import { loadProdukter } from './systemregister.mjs';
+import { referensroller, startaReferens, testaReferens, skrivProdukttest, lasProdukttester } from './produkttest.mjs';
 import { registerUrl, publiceraRegister, listaRegister, scenarioFranRegister } from './register.mjs';
 import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
 
@@ -986,6 +987,8 @@ export function viewData(ws, root) {
     // Körningar mot verkliga T2-realiseringar (federation testa --mot <miljö>).
     miljoer: fs.readdirSync(root).filter((f) => /^federation-.+\.json$/.test(f)).sort()
       .map((f) => JSON.parse(fs.readFileSync(path.join(root, f), 'utf8'))),
+    // Federationstest mot produkternas referensimplementationer.
+    produkttester: lasProdukttester(root),
   };
 }
 
@@ -1335,7 +1338,7 @@ function main(argv) {
     };
     const miljoFlagga = args.indexOf('--miljo');
     const miljo = miljoFlagga >= 0 ? args[miljoFlagga + 1] : process.env.STUDIO_MILJO || null;
-    return startaStudio({ root, port, vard, miljo, verktyg: { loadWorkspace, viewData, renderView, komponeraAlla, bygg, loadManifests } }).then(() => {
+    return startaStudio({ root, port, vard, miljo, verktyg: { loadWorkspace, viewData, renderView, komponeraAlla, bygg, loadManifests, loadRules } }).then(() => {
       console.log(`Studio${miljo === 'test' ? ' i testmiljöläge' : ''} på http://${vard === '0.0.0.0' ? 'localhost' : vard}:${port}/ (Ctrl+C för att stoppa)`);
       return new Promise(() => {});
     });
@@ -1374,6 +1377,39 @@ function main(argv) {
       for (const f of filer) console.log(`  ${f}`);
       console.log(`Hämtade ${filer.length} externa specifikationer`);
       return 0;
+    });
+  }
+  // Federationstest mot en produkts referensimplementation.
+  const flaggor = (namn) => args.flatMap((a, i) => (a === namn ? [args[i + 1]] : []));
+  if (cmd === 'federation' && target === 'testa' && args.includes('--produkt')) {
+    const id = flaggor('--produkt')[0];
+    const produkt = loadProdukter(root).find((p) => p.produkt === id);
+    if (!produkt) throw new Error(`Produkten ${id} finns inte`);
+    const adress = flaggor('--adress')[0] || (produkt.foljsamhet?.kalla === 'referensimplementation' ? produkt.foljsamhet.adress : null);
+    if (!adress) throw new Error(`${produkt.titel} har ingen referensimplementation; ange --adress`);
+    const manifests = loadManifests(ws);
+    const { roller, ejTestbara } = referensroller(produkt, manifests, flaggor('--roll'));
+    if (!roller.length) throw new Error('Inga producentroller att testa; ange --roll tjänst#aktör eller ansök om produktgodkännande för en roll');
+    return testaReferens({ ws, manifests, root, regler: loadRules(ws).system || {}, produkt, adress, roller, ejTestbara }).then((r) => {
+      const rapport = skrivProdukttest(root, r);
+      console.log(`${produkt.titel} → ${adress}: ${r.status}${r.fel ? ` (${r.fel})` : ''}`);
+      for (const k of r.korningar) console.log(`  ${k.status.padEnd(8)} ${k.titel} (${k.roll.split('#')[1]})`);
+      for (const x of ejTestbara) console.log(`  testas inte: ${x.aktor} – ${x.orsak}`);
+      console.log(`Skrev produkttest-${id}.json och ${rapport}`);
+      return r.status === 'godkänt' ? 0 : 1;
+    });
+  }
+  // En lokal referensimplementation för roller (eller en produkts godkännanden).
+  if (cmd === 'referens' && target === 'starta') {
+    const manifests = loadManifests(ws);
+    const produkt = flaggor('--produkt').length ? loadProdukter(root).find((p) => p.produkt === flaggor('--produkt')[0]) : { godkannanden: [] };
+    if (!produkt) throw new Error(`Produkten ${flaggor('--produkt')[0]} finns inte`);
+    const { roller } = referensroller(produkt, manifests, flaggor('--roll'));
+    if (!roller.length) throw new Error('Ange --roll tjänst#aktör (en producentroll) eller --produkt med godkännanden');
+    const port = Number(flaggor('--port')[0] || 4810);
+    return startaReferens({ ws, manifests, roller, port, titel: `${produkt.titel || 'Referensimplementation'} (lokal referensimplementation)` }).then(({ url }) => {
+      console.log(`Referensimplementation för ${roller.map((r) => r.titel).join(', ')} på ${url} (Ctrl+C för att stoppa)`);
+      return new Promise(() => {});
     });
   }
   if (cmd === 'federation' && target === 'testa' && mot) {

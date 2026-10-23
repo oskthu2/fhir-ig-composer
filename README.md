@@ -352,6 +352,28 @@ Leverantören ansöker om **produktgodkännande** per roll (ansökt → godkänd
 
 Systeminstanser pekar på produkten med `produkt:`. Organisationer finns som `Organization` med HSA-id i federationsmedlemskatalogen.
 
+**Federationstest mot referensimplementationen.** När följsamheten bor i en referensimplementation testas den live:
+
+```sh
+node verktyg/ig-composer.mjs federation testa --produkt primarvardssystem-p              # mot produktens adress
+node verktyg/ig-composer.mjs federation testa --produkt primarvardssystem-p --adress <url> [--roll tjänst#aktör]
+```
+
+1. Testet bygger den mockade federationen: stödtjänster och kataloger.
+2. Referensimplementationen registreras som producent. Förutsättningarna (medlemskap, anslutningspunkt och tjänsteinstans) körs som vid en riktig anslutning, så den behöver själv kunna registrera sig i tjänstekatalogen.
+3. Tjänstens användningsfall körs som konsument mot leverantörens adress, inte mot en mock.
+
+Rollerna som testas är produktens godkännanden (eller `--roll`). Bara producentroller testas; en klientroll prövas när leverantörens klient anropar testfederationen. Referensimplementationen behöver godta åtkomstintyg från testfederationens utfärdare.
+
+Resultatet hamnar i `produkttest-<produkt>.json` och `rapport/produkttest-<produkt>.md` och visas på produkten, där testet också kan köras från studion (även i testmiljöläget). Statusen är *godkänt*, *brister* eller *ej nåbar*. Vid ansökan om produktgodkännande följer en godkänd körning med som testrapport.
+
+Exemplets adresser hos leverantörerna är påhittade och ger *ej nåbar*. För att se hela kedjan, starta en lokal referensimplementation för rollerna (summan av rollernas server- och klientkrav, tjänsternas exempel som data) och peka testet mot den:
+
+```sh
+node verktyg/ig-composer.mjs referens starta --produkt primarvardssystem-p --port 4810   # eller --roll tjänst#aktör
+node verktyg/ig-composer.mjs federation testa --produkt primarvardssystem-p --adress http://localhost:4810/fhir
+```
+
 ### Från beställningsstödet till T2
 
 | Beställningsstödet (NTjP) | Här |
