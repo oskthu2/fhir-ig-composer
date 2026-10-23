@@ -72,7 +72,7 @@ jobs:
           node verktyg/ig-composer.mjs federation testa --mot infopeak
           cat rapport/federation-infopeak.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Matris federation × domän
+      - name: Matris innehåll × federation
         run: |
           node verktyg/ig-composer.mjs matris
           cat matris.md >> "$GITHUB_STEP_SUMMARY"

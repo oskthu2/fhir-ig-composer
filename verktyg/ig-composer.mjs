@@ -7,7 +7,7 @@
 //   ig-composer efterbehandla <ig-katalog>  rätta SUSHI-resultatet (efter SUSHI)
 //   ig-composer bygg                        allt ovan + SUSHI för alla IG:ar
 //   ig-composer installera <ig-katalog>     lägg SUSHI-resultatet i lokal FHIR-cache
-//   ig-composer matris                      skriv matrisen federation × domän
+//   ig-composer matris                      skriv matrisen innehåll × federation
 //   ig-composer vy                          skriv vy.html: interaktiv matris från komposition.json
 //   ig-composer system                      summera krav per system (system/*.yaml), gap mot nuläge
 //                                           och testlista; skriver rapport/<system>.md
@@ -869,14 +869,16 @@ export function matrix(ws) {
         && t.komponerar.some((k) => k.paket === d)).map((t) => t.id),
     })),
   }));
+  // Innehåll (byggblock) som rader, eftersom de blir många; federationer som kolumner.
+  const cell = (d, f) => cells.find((r) => r.federation === f).celler.find((c) => c.domän === d).tjanster;
   const md = [
     '<!-- Genererad av ig-composer matris – ändra inte för hand. -->',
-    '# Matris: federation × domän', '',
-    `| Federation | ${domaner.map((d) => ws.get(d).title).join(' | ')} |`,
-    `|---|${domaner.map(() => '---').join('|')}|`,
-    ...cells.map((row) => `| ${ws.get(row.federation).title} | ${row.celler.map((c) => c.tjanster.map((t) => ws.get(t).title).join('<br>') || 'kandidat').join(' | ')} |`),
+    '# Matris: innehåll × federation', '',
+    `| Innehåll | ${federationer.map((f) => f.title).join(' | ')} |`,
+    `|---|${federationer.map(() => '---').join('|')}|`,
+    ...domaner.map((d) => `| ${ws.get(d).title} | ${federationer.map((f) => cell(d, f.id).map((t) => ws.get(t).title).join('<br>') || 'kandidat').join(' | ')} |`),
   ].join('\n');
-  return { json: { domaner, rader: cells }, md: md + '\n' };
+  return { json: { domaner, federationer: federationer.map((f) => f.id), rader: cells }, md: md + '\n' };
 }
 
 // ---------------------------------------------------------------- vy

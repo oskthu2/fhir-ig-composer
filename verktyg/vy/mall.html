@@ -114,8 +114,8 @@ header.topp { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-
 .matrisram { overflow-x: auto; padding: 4px; }
 table.matris { border-collapse: separate; border-spacing: 6px; width: 100%; min-width: 520px; }
 table.matris th, table.matris td { border-radius: 10px; padding: 12px; vertical-align: top; text-align: left; }
-table.matris thead th { background: var(--byggblock-bg); }
-table.matris tbody th { background: var(--federation-bg); width: 22%; }
+table.matris thead th { background: var(--federation-bg); }
+table.matris tbody th { background: var(--byggblock-bg); width: 22%; }
 table.matris td { background: var(--yta2); min-width: 160px; }
 table.matris .hörn { background: transparent; color: var(--svag); font-weight: 500; font-size: 0.8rem; vertical-align: bottom; }
 .hörn .pil { display: block; }
@@ -289,7 +289,7 @@ pre.yaml { background: var(--yta2); border-radius: 8px; padding: 10px; overflow:
 
   <section class="kort studiorad" id="studio" aria-label="Studio" hidden></section>
 
-  <section class="kort matrisram" aria-label="Matris federation × domän">
+  <section class="kort matrisram" aria-label="Matris innehåll × federation">
     <table class="matris" id="matris"></table>
   </section>
   <div class="förklaring" id="förklaring"></div>
@@ -402,29 +402,36 @@ function markerade() {
 }
 
 // ------------------------------------------------------------------ matris
+// Innehållsspecifikationerna (byggblocken) är rader, eftersom de blir många;
+// federationerna är kolumner.
 function ritaMatris() {
   const träff = markerade();
   const t = document.getElementById('matris');
   t.replaceChildren();
   t.classList.toggle('dimma', !!träff);
   const { domaner = [], rader = [] } = DATA.matris || {};
+  const federationer = rader.map((r) => r.federation);
+  const cell = (d, f) => rader.find((r) => r.federation === f)?.celler.find((c) => c.domän === d)?.tjanster || [];
   const huvudknapp = (id) => el('button', {
     class: `huvud${träff?.has(id) ? ' träff' : ''}`, onclick: () => välj('paket', id),
     title: `Visa ${ig(id).titel}`,
   }, el('strong', {}, kort(id)), el('span', { class: 'mono' }, id));
   t.append(el('thead', {}, el('tr', {},
-    el('th', { class: 'hörn', scope: 'col' }, el('span', { class: 'pil' }, 'Domän →'), 'Federation ↓'),
-    domaner.map((d) => el('th', { scope: 'col' }, huvudknapp(d))),
+    el('th', { class: 'hörn', scope: 'col' }, el('span', { class: 'pil' }, 'Federation →'), 'Innehåll ↓'),
+    federationer.map((f) => el('th', { scope: 'col' }, huvudknapp(f))),
   )));
-  t.append(el('tbody', {}, rader.map((r) => el('tr', {},
-    el('th', { scope: 'row' }, huvudknapp(r.federation)),
-    r.celler.map((c) => el('td', {}, c.tjanster.length
-      ? c.tjanster.map((tj) => el('button', {
-        class: `chip tjanst${träff?.has(tj) ? ' träff' : ''}`,
-        'aria-pressed': state.vy === 'tjanst' && state.id === tj ? 'true' : 'false',
-        onclick: () => välj('tjanst', tj),
-      }, kort(tj)))
-      : el('span', { class: 'kandidat' }, 'kandidat'))),
+  t.append(el('tbody', {}, domaner.map((d) => el('tr', {},
+    el('th', { scope: 'row' }, huvudknapp(d)),
+    federationer.map((f) => {
+      const tj = cell(d, f);
+      return el('td', {}, tj.length
+        ? tj.map((x) => el('button', {
+          class: `chip tjanst${träff?.has(x) ? ' träff' : ''}`,
+          'aria-pressed': state.vy === 'tjanst' && state.id === x ? 'true' : 'false',
+          onclick: () => välj('tjanst', x),
+        }, kort(x)))
+        : el('span', { class: 'kandidat' }, 'kandidat'));
+    }),
   ))));
 }
 
@@ -1580,7 +1587,7 @@ function start() {
   }
   const antal = Object.keys(M).length;
   document.getElementById('undertitel').textContent =
-    `Federation × domän · ${igs.size} IG:ar, ${antal} med komposition.json · genererad ${new Date(DATA.genererad).toLocaleString('sv-SE')}`;
+    `Innehåll × federation · ${igs.size} IG:ar, ${antal} med komposition.json · genererad ${new Date(DATA.genererad).toLocaleString('sv-SE')}`;
   const saknas = [...igs.values()].filter((i) => i.komponerar?.length && !M[i.id]).map((i) => i.id);
   document.getElementById('fot').textContent = saknas.length
     ? `Saknar komposition.json: ${saknas.join(', ')}. Kör ig-composer bygg före ig-composer vy.`

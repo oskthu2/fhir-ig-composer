@@ -4,17 +4,19 @@
 
 Komposition av FHIR-IG:ar – prototyp.
 
-Prototyp för att komponera Ineras IG:ar av återanvändbara delar: **byggblock** (kliniskt innehåll), **federationer** (juridiskt utrymme, säkerhetsmetadata och stödtjänster) och **tjänster** (en cell i matrisen federation × domän). Kraven på ett system härleds från de **systemroller** (R5 `ActorDefinition`) som det antar.
+Prototyp för att komponera Ineras IG:ar av återanvändbara delar: **byggblock** (kliniskt innehåll), **federationer** (juridiskt utrymme, säkerhetsmetadata och stödtjänster) och **tjänster** (en cell i matrisen innehåll × federation). Kraven på ett system härleds från de **systemroller** (R5 `ActorDefinition`) som det antar.
 
 Allt är FHIR R5. Arv uttrycks med FHIR:s egna mekanismer (`Parent`, `imposeProfile`, `ActorDefinition.derivedFrom`, `CapabilityStatement.imports`, `Requirements.derivedFrom`, obligations). Det som FHIR inte täcker – kopiering av interna byggblock, RuleSets och federationsmönster – sköts av verktyget `ig-composer` enligt globala regler och extensions på IG:ar och artefakter.
 
 Tjänster i prototypen:
 
-| | Patientöversikt | Labbsvar | Patientöversikt (T2) |
+| Innehåll ↓ · Federation → | SVOD | Individuell tillgång | Patientöversiktsfederationen (T2) |
 |---|---|---|---|
-| **SVOD** | NPÖ | *kandidat* | |
-| **Individuell tillgång** | 1177 Journal | 1177 Journal | |
-| **Patientöversiktsfederationen (T2)** | | | Patientöversikt (T2) |
+| **Patientöversikt** | NPÖ | 1177 Journal | |
+| **Labbsvar** | *kandidat* | 1177 Journal | |
+| **Patientöversikt (T2)** | | | Patientöversikt (T2) |
+
+Innehållsspecifikationerna (byggblocken) är rader, eftersom de blir många, och federationerna kolumner.
 
 Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak och kan testas mot den (se *Två lägen*).
 
@@ -349,7 +351,7 @@ CI (`.github/workflows/bygg.yml`) kör samma sak vid varje push och pull request
 npm install -g fsh-sushi
 cd verktyg && npm ci && cd ..
 node verktyg/ig-composer.mjs bygg         # alla IG:ar i beroendeordning
-node verktyg/ig-composer.mjs matris       # matris.md: federation × domän
+node verktyg/ig-composer.mjs matris       # matris.md: innehåll × federation
 cd verktyg && npm test                    # verktygets tester
 ```
 
