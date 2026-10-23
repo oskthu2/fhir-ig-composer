@@ -1,9 +1,20 @@
-# Tillägg för devcontainern: arbetsytan monteras från repot och containern
-# hålls igång; studion startas av postStartCommand.
+# Tillägg för devcontainern: arbetsytan monteras från repot, och studion
+# körs som containerns egen process. Den väntar tills postCreateCommand har
+# installerat verktygets beroenden och startas om om den avslutas. Loggen
+# finns i /tmp/studio.log.
 # Sökvägar räknas från den första compose-filens katalog (repots rot), inte
 # från denna fil.
 services:
   studio:
     volumes:
       - .:/arbetsyta:cached
-    command: sleep infinity
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          if [ -d verktyg/node_modules/yaml ]; then
+            node verktyg/ig-composer.mjs studio >> /tmp/studio.log 2>&1
+          fi
+          sleep 5
+        done

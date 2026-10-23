@@ -1,28 +1,52 @@
 {
   "name": "fhir-ig-composer",
-  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.devcontainer.yml"],
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.devcontainer.yml"
+  ],
   "service": "studio",
-  "runServices": ["studio", "register"],
+  "runServices": [
+    "studio",
+    "register"
+  ],
   "workspaceFolder": "/arbetsyta",
   "shutdownAction": "stopCompose",
   "features": {
-    "ghcr.io/devcontainers/features/java:1": { "version": "17" },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17"
+    },
     "ghcr.io/devcontainers/features/ruby:1": {}
   },
   "postCreateCommand": "npm ci --prefix verktyg && gem install jekyll --no-document && (node verktyg/ig-composer.mjs bygg || true)",
-  "postStartCommand": "nohup node verktyg/ig-composer.mjs studio > /tmp/studio.log 2>&1 &",
-  "forwardPorts": [4900, 4800, 8080],
+  "forwardPorts": [
+    4900,
+    4800,
+    8080
+  ],
   "portsAttributes": {
-    "4900": { "label": "Studio", "onAutoForward": "openBrowser" },
-    "4800": { "label": "Mockad federation" },
-    "8080": { "label": "Definitionsregister (HAPI R5)" }
+    "4900": {
+      "label": "Studio",
+      "onAutoForward": "openBrowser"
+    },
+    "4800": {
+      "label": "Mockad federation"
+    },
+    "8080": {
+      "label": "Definitionsregister (HAPI R5)"
+    }
   },
   "customizations": {
     "vscode": {
-      "extensions": ["MITRE-Health.vscode-language-fsh", "redhat.vscode-yaml"]
+      "extensions": [
+        "MITRE-Health.vscode-language-fsh",
+        "redhat.vscode-yaml"
+      ]
     },
     "codespaces": {
-      "openFiles": ["README.md"]
+      "openFiles": [
+        "README.md"
+      ]
     }
-  }
+  },
+  "overrideCommand": false
 }
