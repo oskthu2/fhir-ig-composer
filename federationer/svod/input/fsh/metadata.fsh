@@ -16,8 +16,8 @@ Description: "Proveniens för en klinisk resurs i SVOD: vårdgivaren (yttre spä
 * recorded 1..1 MS
 * recorded ^short = "När informationen dokumenterades"
 * agent 2..* MS
-* agent ^slicing.discriminator.type = #value
-* agent ^slicing.discriminator.path = "type.coding.code"
+* agent ^slicing.discriminator.type = #pattern
+* agent ^slicing.discriminator.path = "type"
 * agent ^slicing.rules = #open
 * agent contains vardgivare 1..1 MS and vardenhet 1..1 MS
 * agent[vardgivare].type 1..1

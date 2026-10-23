@@ -30,7 +30,7 @@ Description: "En diagnos eller ett problem. R5: ansvarig och signerare är parti
 * category ^slicing.rules = #open
 * category contains diagnostyp 1..1 MS
 * category[diagnostyp].coding 1..1 MS
-* category[diagnostyp].coding.system = "https://terminologitjansten.inera.se/inera-kodverksforvaltning/kodverk/kv_diagnostyp"
+* category[diagnostyp].coding.system = $kv-diagnostyp
 * category[diagnostyp].coding.code 1..1 MS
 * category[diagnostyp] from DiagnostypVS (required)
 * code 1..1 MS
