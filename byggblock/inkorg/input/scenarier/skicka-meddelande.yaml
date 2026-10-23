@@ -1,0 +1,41 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: SkickaMeddelandeTillInkorg
+nyckel: INK
+titel: Skicka meddelande till invånarens inkorg
+syfte: Vården ska kunna skicka ett meddelande till invånarens inkorg på 1177 och se när det är läst.
+aktorer:
+  vardpersonal: InkVardpersonal
+  avsandare: InkAvsandare
+  inkorg: InkInkorg
+  invanare: InkInvanare
+informationsbehov:
+  meddelande: MeddelandeInfo
+steg:
+  - titel: Vårdpersonalen skriver meddelandet
+    fran: vardpersonal
+    till: avsandare
+  - titel: Det avsändande systemet lämnar meddelandet till inkorgen
+    fran: avsandare
+    till: inkorg
+    aktivitet: lamna
+    information: meddelande
+    alternativ:
+      - titel: Invånaren saknar inkorg
+        steg:
+          - titel: Inkorgen meddelar att meddelandet inte kan levereras
+            fran: inkorg
+            till: avsandare
+            aktivitet: meddela
+            krav: Inkorgen SKA meddela avsändaren när invånaren saknar inkorg, så att vården kan nå invånaren på annat sätt.
+  - titel: Inkorgen aviserar invånaren
+    fran: inkorg
+    till: invanare
+    aktivitet: meddela
+    krav: Inkorgen SKA avisera invånaren utan att meddelandets innehåll syns i aviseringen.
+  - titel: Invånaren läser meddelandet
+    fran: invanare
+    till: inkorg
+  - titel: Det avsändande systemet hämtar läsningsstatus
+    fran: avsandare
+    till: inkorg
+    hamtar: meddelande

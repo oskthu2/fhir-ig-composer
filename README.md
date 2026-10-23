@@ -15,8 +15,14 @@ Tjänster i prototypen:
 | **Patientöversikt** | NPÖ | 1177 Journal | |
 | **Labbsvar** | *kandidat* | 1177 Journal | |
 | **Patientöversikt (T2)** | | | Patientöversikt (T2) |
+| **1177 Inkorg** | | | |
+| **Formulär** | | | |
+| **Journalanteckningar** | | | |
+| **Remisser** | | | |
+| **Tidbokning** | | | |
+| **Vaccinationer** | | | |
 
-Innehållsspecifikationerna (byggblocken) är rader, eftersom de blir många, och federationerna kolumner.
+Innehållsspecifikationerna (byggblocken) är rader, eftersom de blir många, och federationerna kolumner. Byggblock som ännu inte ingår i någon tjänst står som kandidatrader. Delblock, som Fasta kontakter (som bara ingår i Patientöversikt), visas inte.
 
 Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak och kan testas mot den (se *Två lägen*).
 
@@ -319,7 +325,13 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 │   ├── fastakontakter/        inera.bb.fastakontakter  (byggblock, intern)
 │   ├── patientoversikt/       inera.bb.patientoversikt (byggblock, intern) – komponerar Fasta kontakter
 │   ├── labbsvar/              inera.bb.labbsvar        (byggblock, intern)
-│   └── po-t2/                 inera.bb.pot2            (byggblock, intern) – diagnoser, läkemedel, uppmärksamhet
+│   ├── po-t2/                 inera.bb.pot2            (byggblock, intern) – diagnoser, läkemedel, uppmärksamhet
+│   ├── inkorg/                inera.bb.inkorg          (byggblock, intern) – 1177 Inkorg, meddelanden till invånaren (Communication)
+│   ├── formular/              inera.bb.formular        (byggblock, intern) – formulärbegäran och svar (Task, QuestionnaireResponse)
+│   ├── journalanteckningar/   inera.bb.anteckningar    (byggblock, intern) – signerade anteckningar (DocumentReference)
+│   ├── remisser/              inera.bb.remisser        (byggblock, intern) – remiss med frågeställning (ServiceRequest)
+│   ├── tidbokning/            inera.bb.tidbokning      (byggblock, intern) – lediga tider och bokning (Slot, Appointment)
+│   └── vaccinationer/         inera.bb.vaccinationer   (byggblock, intern) – givna vaccinationer (Immunization)
 ├── federationer/
 │   ├── svod/                  inera.fed.svod           (federation, intern)  – komponerar T2-samverkan
 │   ├── individuell/           inera.fed.individuell    (federation, intern)  – komponerar T2-samverkan

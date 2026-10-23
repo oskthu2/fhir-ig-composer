@@ -1,0 +1,23 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: TaDelAvVaccinationer
+nyckel: VACC
+titel: Ta del av vaccinationer
+syfte: Den som har rätt att ta del av patientens vaccinationer ska kunna se vilka vacciner som getts, när och vilken dos.
+aktorer:
+  lasare: VaccLasare
+  app: VaccKonsument
+  kalla: VaccProducent
+informationsbehov:
+  vaccination: VaccinationInfo
+steg:
+  - titel: Läsaren öppnar vaccinationerna
+    fran: lasare
+    till: app
+  - titel: Konsumenten hämtar patientens vaccinationer
+    fran: app
+    till: kalla
+    hamtar: vaccination
+  - titel: Konsumenten visar vaccin, datum och dos
+    fran: app
+    till: lasare
+    krav: Konsumenten SKA visa vaccin, datum och dosnummer, och vilken enhet som gav vaccinationen.

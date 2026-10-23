@@ -859,8 +859,15 @@ function manifest(r) {
 export function matrix(ws) {
   const tjanster = [...ws.values()].filter((ig) => ig.roll === 'tjanst');
   const federationer = [...ws.values()].filter((ig) => ig.roll === 'federation');
-  const domaner = [...new Set(tjanster.flatMap((t) => t.komponerar
+  const byggblock = [...ws.values()].filter((ig) => ig.roll === 'byggblock');
+  const anvanda = [...new Set(tjanster.flatMap((t) => t.komponerar
     .map((k) => ws.get(k.paket)).filter((d) => d?.roll === 'byggblock').map((d) => d.id)))];
+  // Fristående byggblock (som ingen tjänst eller annat byggblock komponerar)
+  // blir kandidatrader; delblock som bara ingår i ett annat byggblock visas inte.
+  const delblock = new Set(byggblock.flatMap((b) => b.komponerar.map((k) => k.paket)));
+  const kandidater = byggblock.filter((b) => !anvanda.includes(b.id) && !delblock.has(b.id))
+    .sort((a, b) => a.title.localeCompare(b.title, 'sv')).map((b) => b.id);
+  const domaner = [...anvanda, ...kandidater];
   const cells = federationer.map((f) => ({
     federation: f.id,
     celler: domaner.map((d) => ({

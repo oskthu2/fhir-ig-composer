@@ -1,0 +1,31 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: SkickaRemiss
+nyckel: REM
+titel: Skicka remiss
+syfte: En remittent ska kunna skicka en remiss med frågeställning till en mottagande enhet, och få veta om den inte kan tas emot.
+aktorer:
+  remittent: RemRemittent
+  avsandare: RemAvsandare
+  mottagare: RemMottagare
+informationsbehov:
+  remiss: RemissInfo
+steg:
+  - titel: Remittenten skriver remissen
+    fran: remittent
+    till: avsandare
+  - titel: Det remitterande systemet skickar remissen
+    fran: avsandare
+    till: mottagare
+    aktivitet: lamna
+    information: remiss
+    alternativ:
+      - titel: Remissen kan inte tas emot
+        steg:
+          - titel: Det mottagande systemet meddelar varför
+            fran: mottagare
+            till: avsandare
+            aktivitet: meddela
+            krav: Det mottagande systemet SKA meddela det remitterande systemet varför remissen inte kan tas emot.
+  - titel: Det remitterande systemet visar att remissen är skickad
+    fran: avsandare
+    till: remittent

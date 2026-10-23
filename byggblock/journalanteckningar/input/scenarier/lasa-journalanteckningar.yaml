@@ -1,0 +1,23 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: LasaJournalanteckningar
+nyckel: ANT
+titel: Läsa journalanteckningar
+syfte: Den som har rätt att ta del av patientens journal ska kunna läsa signerade anteckningar med författare och tidpunkt.
+aktorer:
+  lasare: AntLasare
+  konsument: AntKonsument
+  producent: AntProducent
+informationsbehov:
+  anteckning: AnteckningInfo
+steg:
+  - titel: Läsaren öppnar journalanteckningarna
+    fran: lasare
+    till: konsument
+  - titel: Konsumenten hämtar patientens journalanteckningar
+    fran: konsument
+    till: producent
+    hamtar: anteckning
+  - titel: Konsumenten visar anteckningarna med författare och tidpunkt
+    fran: konsument
+    till: lasare
+    krav: Konsumenten SKA visa vem som skrivit anteckningen, när och på vilken vårdenhet.

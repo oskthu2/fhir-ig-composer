@@ -1,0 +1,41 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: BokaTid
+nyckel: TID
+titel: Boka tid
+syfte: Invånaren ska kunna se lediga tider och boka en av dem.
+aktorer:
+  invanare: TidInvanare
+  tjanst: TidBokningstjanst
+  tidbok: TidTidbok
+informationsbehov:
+  ledigtid: LedigTidInfo
+  bokning: BokningInfo
+steg:
+  - titel: Invånaren väljer typ av besök
+    fran: invanare
+    till: tjanst
+  - titel: Bokningstjänsten hämtar lediga tider
+    fran: tjanst
+    till: tidbok
+    hamtar: ledigtid
+  - titel: Bokningstjänsten visar de lediga tiderna
+    fran: tjanst
+    till: invanare
+  - titel: Invånaren väljer en tid
+    fran: invanare
+    till: tjanst
+  - titel: Bokningstjänsten bokar tiden
+    fran: tjanst
+    till: tidbok
+    aktivitet: registrera
+    information: bokning
+    alternativ:
+      - titel: Tiden hann bokas av någon annan
+        steg:
+          - titel: Bokningstjänsten erbjuder andra tider
+            fran: tjanst
+            till: invanare
+            krav: Bokningstjänsten SKA erbjuda andra lediga tider när den valda tiden redan är bokad.
+  - titel: Bokningstjänsten bekräftar bokningen
+    fran: tjanst
+    till: invanare

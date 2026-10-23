@@ -93,7 +93,11 @@ test('lokal tjänsteprofil utan federationens bas ger fel', () => {
 
 test('matrisen placerar tjänsterna i rätt celler', () => {
   const { json } = matrix(ws);
-  assert.deepEqual(json.domaner, ['inera.bb.patientoversikt', 'inera.bb.labbsvar', 'inera.bb.pot2']);
+  // Byggblock som tjänsterna använder först, sedan fristående kandidater; delblock (fasta kontakter) inte alls.
+  assert.deepEqual(json.domaner.slice(0, 3), ['inera.bb.patientoversikt', 'inera.bb.labbsvar', 'inera.bb.pot2']);
+  assert.ok(['inera.bb.inkorg', 'inera.bb.vaccinationer', 'inera.bb.remisser'].every((d) => json.domaner.includes(d)));
+  assert.ok(!json.domaner.includes('inera.bb.fastakontakter'));
+  assert.ok(json.rader.every((r) => r.celler.find((c) => c.domän === 'inera.bb.inkorg').tjanster.length === 0));
   assert.deepEqual(json.rader.find((r) => r.federation === 'inera.fed.pot2').celler.find((c) => c.domän === 'inera.bb.pot2').tjanster, ['inera.tjanst.pot2']);
   const cell = (fed, dom) => json.rader.find((r) => r.federation === fed).celler.find((c) => c.domän === dom).tjanster;
   assert.deepEqual(cell('inera.fed.svod', 'inera.bb.patientoversikt'), ['inera.tjanst.npo']);

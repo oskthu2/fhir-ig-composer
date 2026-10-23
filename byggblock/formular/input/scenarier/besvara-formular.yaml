@@ -1,0 +1,33 @@
+# Logiskt arbetsflöde: aktiviteter, roller och information.
+anvandningsfall: BesvaraFormular
+nyckel: FORM
+titel: Besvara formulär
+syfte: Vården ska kunna be invånaren fylla i ett formulär och ta del av svaret inför besöket.
+aktorer:
+  vardpersonal: FormVardpersonal
+  vardsystem: FormVardsystem
+  formulartjanst: FormFormulartjanst
+  invanare: FormInvanare
+informationsbehov:
+  begaran: FormularbegaranInfo
+  svar: FormularsvarInfo
+steg:
+  - titel: Vårdpersonalen väljer formulär för patienten
+    fran: vardpersonal
+    till: vardsystem
+  - titel: Vårdsystemet skickar formulärbegäran
+    fran: vardsystem
+    till: formulartjanst
+    aktivitet: lamna
+    information: begaran
+  - titel: Invånaren fyller i och skickar formuläret
+    fran: invanare
+    till: formulartjanst
+  - titel: Vårdsystemet hämtar svaret
+    fran: vardsystem
+    till: formulartjanst
+    hamtar: svar
+  - titel: Vårdsystemet visar svaret
+    fran: vardsystem
+    till: vardpersonal
+    krav: Vårdsystemet SKA visa när formuläret besvarades.
