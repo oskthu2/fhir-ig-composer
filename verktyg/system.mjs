@@ -25,7 +25,7 @@ const stangning = (m, namn, seen = new Set()) => {
   for (const i of m.formagor[namn].imports) stangning(m, i, seen);
   return seen;
 };
-const stangningAv = (m, namn) => namn.reduce((seen, n) => stangning(m, n, seen), new Set());
+export const stangningAv = (m, namn) => namn.reduce((seen, n) => stangning(m, n, seen), new Set());
 
 const add = (map, key, val) => {
   if (!map.has(key)) map.set(key, new Set());
@@ -77,7 +77,7 @@ export function apiStatus(item, aktivaRoller) {
 }
 
 // En aktör och dess förfäder enligt tjänstens manifest.
-const aktorKedja = (m, namn) => {
+export const aktorKedja = (m, namn) => {
   const ut = [];
   const besok = (n) => {
     if (!n || ut.includes(n)) return;

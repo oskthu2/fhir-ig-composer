@@ -12,6 +12,13 @@
 //   PUT  /api/tillampning/<ig-id>  { flode, steg, operation, resurstyp, ta_bort }  bindning i tjänsten
 //   POST /api/aterstall            { fil }        git checkout av en fil
 //   POST /api/bygg                                hela bygget med SUSHI
+//   POST /api/anslut/forhandsgranska { system, titel, organisation, roller }  klient-CS, scopes, WSO2-plan
+//   POST /api/anslut               samma        (testmiljöläge) roller + anslutningar till behörig i test
+//   POST /api/anslutning/status    { system, tjanst, aktor, miljo, status, bevis }  nästa steg i kedjan
+//
+// Testmiljöläge (studio --miljo test): studion för den som ansluter en klient.
+// Bara anslutningsflödet skriver, och bara anslutningar i test; IG:ar, flöden
+// och systemens roller i övrigt redigeras inte där.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -19,6 +26,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import YAML from 'yaml';
 import { loadSystems } from './system.mjs';
+import { overga } from './anslutning.mjs';
+import { behorigheterForSystem, klientCapabilityStatement, arKonsumentroll, sammanfogaScopes } from './behorighet.mjs';
+import { wso2Plan } from './wso2.mjs';
 
 const EXT = 'https://fhir.inera.se/ig/conventions/StructureDefinition/';
 const SKISS = /^[^/]+\/[^/]+\/input\/scenarier\/[a-z0-9-]+\.yaml$/;
@@ -114,12 +124,23 @@ export function skrivKomposition(ws, igId, k, root) {
   return path.relative(root, fil);
 }
 
-export function skrivSystem(root, namn, s) {
-  if (!SYSTEMNAMN.test(namn)) throw new Error(`Ogiltigt systemnamn ${namn}`);
+// Systemfilen för ett namn: den befintliga filen eller en ny.
+function systemDok(root, namn) {
+  if (!SYSTEMNAMN.test(namn || '')) throw new Error(`Ogiltigt systemnamn ${namn}`);
   const dir = path.join(root, 'system');
+  fs.mkdirSync(dir, { recursive: true });
   const befintlig = fs.readdirSync(dir).find((f) => /\.ya?ml$/.test(f) && YAML.parse(fs.readFileSync(path.join(dir, f), 'utf8'))?.system === namn);
   const fil = path.join(dir, befintlig || `${namn.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()}.yaml`);
   const doc = befintlig ? YAML.parseDocument(fs.readFileSync(fil, 'utf8')) : new YAML.Document({ system: namn });
+  return { fil, doc, befintlig: !!befintlig };
+}
+const skrivDok = (root, fil, doc) => {
+  fs.writeFileSync(fil, doc.toString({ lineWidth: 0 }));
+  return path.relative(root, fil);
+};
+
+export function skrivSystem(root, namn, s) {
+  const { fil, doc, befintlig } = systemDok(root, namn);
   const satt = (nyckel, v) => {
     if (v === undefined) return;
     if (v === null || (Array.isArray(v) && !v.length && nyckel !== 'roller')) doc.delete(nyckel);
@@ -135,8 +156,98 @@ export function skrivSystem(root, namn, s) {
     satt('informationsmangder', Object.keys(m).length ? m : null);
   }
   if (!befintlig && !doc.has('nulage')) doc.set('nulage', { katalog: 'nulage/t2-katalog.json' });
-  fs.writeFileSync(fil, doc.toString({ lineWidth: 0 }));
-  return path.relative(root, fil);
+  return skrivDok(root, fil, doc);
+}
+
+// ---- anslutningar
+
+// Konsumentroller per tjänst: tjänsteaktörer med klient- men inga
+// serverförmågor. Det är dem en klient kan ansluta sig som.
+export function konsumentroller(manifests) {
+  return Object.fromEntries(Object.values(manifests).filter((m) => m.ig.roll === 'tjanst')
+    .map((m) => [m.ig.id, m.kravprofiler.map((k) => k.aktor).filter((a) => arKonsumentroll(m, a))]));
+}
+
+// En begäran från anslutningsflödet, kontrollerad mot IG:erna.
+function lasBegaran(b, manifests) {
+  if (!SYSTEMNAMN.test(b.system || '')) throw new Error('Systemnamnet ska vara bokstäver och siffror, t.ex. VardappY');
+  if (!b.roller?.length) throw new Error('Välj minst en tjänst att konsumera');
+  const roller = b.roller.map((r) => {
+    const m = manifests[r.tjanst];
+    if (!m) throw new Error(`${r.tjanst} finns inte`);
+    if (!arKonsumentroll(m, r.aktor)) throw new Error(`${r.aktor} är ingen konsumentroll i ${r.tjanst}`);
+    const giltiga = (m.informationsmangder || []).map((i) => i.nyckel);
+    const val = r.informationsmangder?.length ? r.informationsmangder : null;
+    for (const n of val || []) if (!giltiga.includes(n)) throw new Error(`${n} är ingen informationsmängd i ${r.tjanst}`);
+    return { tjanst: r.tjanst, aktor: r.aktor, ...(val ? { informationsmangder: val } : {}) };
+  });
+  const organisation = b.organisation?.namn ? { namn: b.organisation.namn, ...(b.organisation.hsaId ? { hsaId: b.organisation.hsaId } : {}) } : undefined;
+  return { sys: { system: b.system, titel: b.titel || b.system, organisation }, roller };
+}
+
+// Vad anslutningen skulle ge i testmiljön: behörigheter per roll, scopes,
+// klient-CapabilityStatement och WSO2-plan. Skriver ingenting.
+export function forhandsgranskaAnslutning(b, manifests) {
+  const { sys, roller } = lasBegaran(b, manifests);
+  const { behorigheter, fel } = behorigheterForSystem(sys, manifests, roller);
+  return {
+    behorigheter, fel,
+    scopes: sammanfogaScopes(behorigheter.flatMap((x) => x.scopes)),
+    klientCs: klientCapabilityStatement(sys, behorigheter, { miljo: 'test' }),
+    wso2: wso2Plan(sys, behorigheter, roller.map((r) => ({ ...r, miljo: 'test', status: 'behorig' })), { miljo: 'test' }),
+  };
+}
+
+// Historik och bevis skrivs en rad per post.
+function satAnslutningar(doc, lista) {
+  const nod = doc.createNode(lista);
+  for (const post of nod.items) {
+    for (const k of ['historik', 'bevis']) for (const x of post.get(k, true)?.items || []) x.flow = true;
+    const im = post.get('informationsmangder', true);
+    if (im) im.flow = true;
+  }
+  doc.set('anslutningar', nod);
+}
+
+// Testmiljön: rollerna läggs till systemet (som skapas om det inte finns) och
+// varje anslutning i test förs begärd → behörig direkt. Taket kommer från
+// IG:erna; bara konsumentroller kan begäras här.
+export function anslutKlientTest(root, b, manifests, { datum } = {}) {
+  const { sys, roller } = lasBegaran(b, manifests);
+  const { fil, doc, befintlig } = systemDok(root, sys.system);
+  const nu = doc.toJS() || {};
+  if (!befintlig) {
+    doc.set('titel', sys.titel);
+    if (sys.organisation) doc.set('organisation', sys.organisation);
+  }
+  const sysRoller = [...(nu.roller || [])];
+  for (const r of roller) if (!sysRoller.some((x) => x.tjanst === r.tjanst && x.aktor === r.aktor)) sysRoller.push({ tjanst: r.tjanst, aktor: r.aktor });
+  let ansl = nu.anslutningar || [];
+  const av = sys.organisation?.namn || sys.system;
+  for (const r of roller) {
+    const mal = { tjanst: r.tjanst, aktor: r.aktor, miljo: 'test' };
+    const finns = ansl.find((a) => a.miljo === 'test' && a.tjanst === r.tjanst && a.aktor === r.aktor);
+    if (finns?.status === 'aterkallad') throw new Error(`${r.aktor} i ${r.tjanst} är återkallad i test; den öppnas inte igen härifrån`);
+    if (!finns) ansl = overga(ansl, mal, 'begard', { av, datum, informationsmangder: r.informationsmangder });
+    else if (r.informationsmangder) ansl = ansl.map((a) => (a === finns ? { ...a, informationsmangder: r.informationsmangder } : a));
+    if (ansl.find((a) => a.miljo === 'test' && a.tjanst === r.tjanst && a.aktor === r.aktor).status === 'begard') {
+      ansl = overga(ansl, mal, 'behorig', { av: 'automatiskt i testmiljön', datum });
+    }
+  }
+  doc.set('roller', sysRoller);
+  satAnslutningar(doc, ansl);
+  return skrivDok(root, fil, doc);
+}
+
+// Nästa steg (eller återkallelse) för en anslutning. I testmiljöläget bara i test.
+export function skrivAnslutningsstatus(root, b, { studiomiljo = null, datum } = {}) {
+  if (studiomiljo === 'test' && b.miljo !== 'test') throw new Error('Testmiljöläget ändrar bara anslutningar i test');
+  const { fil, doc, befintlig } = systemDok(root, b.system);
+  if (!befintlig) throw new Error(`Systemet ${b.system} finns inte`);
+  const ansl = overga(doc.toJS().anslutningar || [], { tjanst: b.tjanst, aktor: b.aktor, miljo: b.miljo }, b.status,
+    { av: b.av || (studiomiljo === 'test' ? 'studio (test)' : 'studio'), datum, bevis: (b.bevis || []).filter((x) => x?.typ), root });
+  satAnslutningar(doc, ansl);
+  return skrivDok(root, fil, doc);
 }
 
 // Skissen som YAML; den inledande kommentaren i en befintlig fil behålls.
@@ -181,14 +292,20 @@ export function skrivTillampning(ws, igId, b, root) {
 
 // ---- server
 
-export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', verktyg }) {
-  const { loadWorkspace, viewData, renderView, komponeraAlla, bygg } = verktyg;
+export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', miljo = null, verktyg }) {
+  const { loadWorkspace, viewData, renderView, komponeraAlla, bygg, loadManifests } = verktyg;
+  if (miljo && miljo !== 'test') throw new Error(`Studion har bara testmiljöläge (--miljo test), inte ${miljo}`);
   const sida = () => {
     const ws = loadWorkspace(root);
     const data = viewData(ws, root);
-    data.studio = { skisser: skisser(ws, root), konfiguration: konfiguration(ws), andringar: andringar(root), system: loadSystems(root) };
+    data.studio = {
+      miljo, skisser: skisser(ws, root), konfiguration: konfiguration(ws), andringar: andringar(root), system: loadSystems(root),
+      konsumentroller: konsumentroller(data.manifest),
+    };
     return renderView(data);
   };
+  // Det som inte får skrivas i testmiljöläget.
+  const REDIGERING = /^\/api\/(system\/|skiss$|komposition\/|tillampning\/|aterstall$|bygg$)/;
   const json = (res, status, body) => {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(body));
@@ -212,6 +329,20 @@ export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', verk
       if (req.method === 'GET' && (u.pathname === '/' || u.pathname === '/index.html')) {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         return res.end(sida());
+      }
+      if (miljo === 'test' && req.method !== 'GET' && REDIGERING.test(u.pathname)) {
+        return json(res, 403, { fel: 'Inte i testmiljöläget: där ansluts klienter, IG:ar och flöden redigeras inte' });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/anslut/forhandsgranska') {
+        return json(res, 200, forhandsgranskaAnslutning(await kropp(req), loadManifests(loadWorkspace(root))));
+      }
+      if (req.method === 'POST' && u.pathname === '/api/anslut') {
+        if (miljo !== 'test') return json(res, 403, { fel: 'Klienter ansluts i testmiljöläget (studio --miljo test)' });
+        const b = await kropp(req);
+        return json(res, 200, { fil: anslutKlientTest(root, b, loadManifests(loadWorkspace(root))), fel: [], varningar: [] });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/anslutning/status') {
+        return json(res, 200, { fil: skrivAnslutningsstatus(root, await kropp(req), { studiomiljo: miljo }), fel: [], varningar: [] });
       }
       if (req.method === 'PUT' && u.pathname.startsWith('/api/system/')) {
         return json(res, 200, efter(skrivSystem(root, decodeURIComponent(u.pathname.slice(12)), await kropp(req))));

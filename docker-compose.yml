@@ -1,5 +1,6 @@
 # Lokalt: docker compose up
 #   Studion            http://localhost:4900/
+#   Studion, testmiljö  http://localhost:4901/  (Anslut klient (test))
 #   Definitionsregister http://localhost:8080/fhir (HAPI FHIR R5)
 # Publicera definitionerna i registret:
 #   docker compose exec studio node verktyg/ig-composer.mjs register publicera
@@ -19,6 +20,23 @@ services:
       INFOPEAK_LOSENORD: ${INFOPEAK_LOSENORD:-}
     depends_on:
       - register
+
+  # Studion i testmiljöläge: klienter ansluts till test, inget annat redigeras.
+  # Samma arbetsyta; väntar tills studio-tjänsten har installerat beroendena.
+  studio-test:
+    build: .
+    ports:
+      - "4901:4901"
+    volumes:
+      - .:/arbetsyta
+    environment:
+      STUDIO_MILJO: test
+    command:
+      - sh
+      - -c
+      - until [ -d verktyg/node_modules/yaml ]; do sleep 5; done; exec node verktyg/ig-composer.mjs studio --miljo test --port 4901
+    depends_on:
+      - studio
 
   register:
     image: hapiproject/hapi:v8.12.0-2

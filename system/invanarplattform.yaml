@@ -9,3 +9,25 @@ roller:
 nulage:
   formaga: nulage/invanarplattform-metadata.json
   katalog: nulage/t2-katalog.json
+# Vad systemet faktiskt är godkänt för, per miljö (statuskedjan i
+# verktyg/anslutning.mjs). Skilt från nuläget, som är vad systemet deklarerar.
+anslutningar:
+  - tjanst: inera.tjanst.journal1177
+    aktor: Journal1177Invanartjanst
+    miljo: test
+    status: testad
+    historik:
+      - { status: begard, datum: 2026-09-01, av: Inera AB }
+      - { status: behorig, datum: 2026-09-01, av: automatiskt i testmiljön }
+      - { status: testad, datum: 2026-09-20, av: Inera AB }
+    bevis:
+      - { typ: testrapport, fil: rapport/federation.md, datum: 2026-09-20 }
+  - tjanst: inera.tjanst.journal1177
+    aktor: Journal1177Invanartjanst
+    miljo: prod
+    status: godkand
+    historik:
+      - { status: ansokt, datum: 2026-09-22, av: Inera AB }
+      - { status: godkand, datum: 2026-10-01, av: Tjänsteägare 1177 Journal }
+    bevis:
+      - { typ: beslut, text: Godkänd för produktion efter test, datum: 2026-10-01 }

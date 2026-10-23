@@ -48,6 +48,8 @@ import { loadSystems, analyseSystem, renderReport } from './system.mjs';
 import { byggFederation, testaFederation, korFederation, renderFederationReport } from './federation.mjs';
 import { anvandningsfallSida, mermaidFranScenario, arbetsflodesSida, mermaidFranPlan } from './mermaid.mjs';
 import { startaStudio } from './studio.mjs';
+import { behorighetFor, behorigheterForRoll, arKonsumentroll } from './behorighet.mjs';
+import { KEDJA, STATUS_TITEL } from './anslutning.mjs';
 import { registerUrl, publiceraRegister, listaRegister, scenarioFranRegister } from './register.mjs';
 import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
 
@@ -905,7 +907,7 @@ export function loadManifests(ws) {
 
 export function analyseSystems(ws, root, manifest = loadManifests(ws)) {
   const regler = loadRules(ws).system || {};
-  return loadSystems(root).map((sys) => analyseSystem(sys, manifest, root, regler));
+  return loadSystems(root).map((sys) => ({ ...analyseSystem(sys, manifest, root, regler), behorighet: behorighetFor(sys, manifest) }));
 }
 
 // Komponerar alla IG:ar i byggordning, utan SUSHI (studions snabba varv).
@@ -945,6 +947,9 @@ export function viewData(ws, root) {
     manifest,
     mermaid: mermaidPerIg(ws),
     system: analyseSystems(ws, root, manifest),
+    // Scopes per tjänsteaktör, ur klientförmågorna i tjänstens IG.
+    behorigheter: Object.fromEntries(Object.values(manifest).filter((m) => m.ig.roll === 'tjanst').map((m) => [m.ig.id,
+      m.kravprofiler.map((k) => ({ ...behorigheterForRoll(m, k.aktor), konsument: arKonsumentroll(m, k.aktor) }))])),
     federation: fs.existsSync(path.join(root, 'federation.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'federation.json'), 'utf8')) : null,
     // Körningar mot verkliga T2-realiseringar (federation testa --mot <miljö>).
     miljoer: fs.readdirSync(root).filter((f) => /^federation-.+\.json$/.test(f)).sort()
@@ -1187,6 +1192,58 @@ function main(argv) {
     console.log(`Rapporter i ${dir}`);
     return status;
   }
+  if (['anslutning', 'scopes', 'klient', 'wso2'].includes(cmd)) {
+    const manifests = loadManifests(ws);
+    const miljoFlagga = args.indexOf('--miljo');
+    const miljo = miljoFlagga >= 0 ? args[miljoFlagga + 1] : 'test';
+    // scopes <tjänst> [aktör]: per tjänsteaktör, direkt ur IG:n.
+    if (cmd === 'scopes' && manifests[target]) {
+      const m = manifests[target];
+      const aktor = args[2] && !args[2].startsWith('--') ? args[2] : null;
+      for (const k of m.kravprofiler.filter((x) => !aktor || x.aktor === aktor)) {
+        const r = behorigheterForRoll(m, k.aktor);
+        console.log(`${r.titel} (${k.aktor})${arKonsumentroll(m, k.aktor) ? ' · konsumentroll' : ''}`);
+        for (const x of r.mottagare) console.log(`  → ${x.titel}: ${x.scopes.join(' ')}`);
+        if (!r.mottagare.length) console.log('  inga klientanrop');
+      }
+      return 0;
+    }
+    const systemen = loadSystems(root).filter((x) => !target || x.system === target);
+    if (target && !systemen.length) throw new Error(`${target} är varken ett system eller en tjänst`);
+    for (const sys of systemen) {
+      const b = behorighetFor(sys, manifests);
+      if (cmd === 'anslutning') {
+        console.log(`${sys.titel || sys.system}:`);
+        for (const a of b.anslutningar) {
+          const kedja = a.kedja.map((k) => (k.status === a.status ? `[${k.titel}]` : k.titel)).join(' → ');
+          console.log(`  ${a.miljo.padEnd(4)} ${a.tjanstTitel} · ${a.titel}: ${kedja}${a.status === 'aterkallad' ? ` (${STATUS_TITEL.aterkallad})` : ''}`
+            + `${a.kraverBevis ? ` · nästa steg kräver ${a.kraverBevis}` : ''}${a.fel.length ? ` · fel: ${a.fel.join('; ')}` : ''}`);
+        }
+        if (!b.anslutningar.length) console.log('  inga anslutningar');
+        continue;
+      }
+      if (!KEDJA[miljo]) throw new Error(`Okänd miljö ${miljo} (${Object.keys(KEDJA).join(', ')})`);
+      const x = b.miljoer[miljo];
+      if (!x) { console.log(`${sys.titel || sys.system}: inga anslutningar i ${miljo}`); continue; }
+      if (cmd === 'scopes') {
+        console.log(`${sys.titel || sys.system} (${miljo}): ${x.scopes.join(' ')}`);
+        for (const r of x.behorigheter) {
+          console.log(`  ${r.titel} i ${r.tjanstTitel}`);
+          for (const y of r.mottagare) console.log(`    → ${y.titel}: ${y.scopes.join(' ')}`);
+        }
+      }
+      if (cmd === 'klient') console.log(JSON.stringify(x.klientCs, null, 2));
+      if (cmd === 'wso2') {
+        const fil = path.join(root, 'rapport', `wso2-${sys.system}-${miljo}.json`);
+        fs.mkdirSync(path.dirname(fil), { recursive: true });
+        fs.writeFileSync(fil, JSON.stringify(x.wso2, null, 2) + '\n');
+        console.log(`${sys.titel || sys.system} (${miljo}, torrkörning): ${x.wso2.apier.length} API:er, ${x.wso2.apiProdukter.length} API Products, ${x.wso2.prenumerationer.length} prenumerationer${x.wso2.borttag.length ? `, ${x.wso2.borttag.length} borttag` : ''}${x.wso2.vantar.length ? `, ${x.wso2.vantar.length} väntar på behörighet` : ''}`);
+        for (const a of x.wso2.anrop) console.log(`  ${a.metod.padEnd(6)} ${a.sokvag}  ${a.beskrivning}`);
+        console.log(`  → ${path.relative(root, fil)}`);
+      }
+    }
+    return 0;
+  }
   const motFlagga = args.indexOf('--mot');
   const mot = motFlagga >= 0 ? args[motFlagga + 1] : null;
   const serverFlagga = args.indexOf('--server');
@@ -1199,8 +1256,10 @@ function main(argv) {
       const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), 'bygg', '--arbetsyta', root], { encoding: 'utf8' });
       return { status: r.status, logg: `${r.stdout}${r.stderr}`.split('\n').slice(-60).join('\n') };
     };
-    return startaStudio({ root, port, vard, verktyg: { loadWorkspace, viewData, renderView, komponeraAlla, bygg } }).then(() => {
-      console.log(`Studio på http://${vard === '0.0.0.0' ? 'localhost' : vard}:${port}/ (Ctrl+C för att stoppa)`);
+    const miljoFlagga = args.indexOf('--miljo');
+    const miljo = miljoFlagga >= 0 ? args[miljoFlagga + 1] : process.env.STUDIO_MILJO || null;
+    return startaStudio({ root, port, vard, miljo, verktyg: { loadWorkspace, viewData, renderView, komponeraAlla, bygg, loadManifests } }).then(() => {
+      console.log(`Studio${miljo === 'test' ? ' i testmiljöläge' : ''} på http://${vard === '0.0.0.0' ? 'localhost' : vard}:${port}/ (Ctrl+C för att stoppa)`);
       return new Promise(() => {});
     });
   }
@@ -1322,7 +1381,7 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | anslutning [system] | scopes <system|tjänst> [aktör] [--miljo test|prod] | klient|wso2 [system] [--miljo test|prod] | studio [--port N] [--miljo test] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 

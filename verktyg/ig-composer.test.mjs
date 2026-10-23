@@ -15,6 +15,9 @@ import { testaFederation, byggFederation } from './federation.mjs';
 import { systemFranKatalog, jamforSpecifikationer, lasMiljo } from './infopeak.mjs';
 import { loadManifests } from './ig-composer.mjs';
 import { parseFsh, expandRules } from './fsh.mjs';
+import { behorigheterForRoll, behorigheterForSystem, klientCapabilityStatement, arKonsumentroll, sammanfogaScopes } from './behorighet.mjs';
+import { overga, nastaStatus } from './anslutning.mjs';
+import { wso2Plan } from './wso2.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ws = loadWorkspace(root);
@@ -655,6 +658,133 @@ test('studion skriver och tar bort en bindning i tjänstens tillämpning', () =>
     assert.ok(!fs.existsSync(fil), 'utan bindningar tas filen bort');
     assert.throws(() => skrivTillampning(w, 'inera.bb.pot2', { flode: 'x', steg: '1' }, dir), /ingen tjänst/);
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------- anslutningar och behörigheter
+
+test('scopes ur IG:n: mottagare per anrop, SMART v2, och avsmalning med informationsmängder', () => {
+  const m = loadManifests(loadWorkspace(root))['inera.tjanst.npo'];
+  const b = behorigheterForRoll(m, 'NPOKonsument');
+  const till = Object.fromEntries(b.mottagare.map((x) => [x.aktor, x.scopes]));
+  assert.deepEqual(till.NPOKallsystem, ['system/CareTeam.s', 'system/Encounter.s', 'system/Provenance.s']);
+  assert.deepEqual(till.Tjanstekatalog, ['system/Endpoint.s']);
+  assert.deepEqual(till.SVODLoggtjanst, ['system/AuditEvent.c']);
+  assert.deepEqual(b.utanMottagare, []);
+  assert.ok(arKonsumentroll(m, 'NPOKonsument'));
+  assert.ok(!arKonsumentroll(m, 'NPOKallsystem'), 'källsystemet har serverförmågor');
+  const smal = behorigheterForRoll(m, 'NPOKonsument', ['VardkontaktInfo']);
+  assert.deepEqual(smal.bortvalda, ['CareTeam']);
+  assert.ok(!smal.scopes.includes('system/CareTeam.s'));
+  assert.deepEqual(sammanfogaScopes(['system/Endpoint.cu', 'system/Endpoint.s', 'system/Flag.s']), ['system/Endpoint.cus', 'system/Flag.s']);
+});
+
+test('klient-CapabilityStatement: kind=instance, mode=client, instantiates rollernas förmågor', () => {
+  const manifests = loadManifests(loadWorkspace(root));
+  const sys = { system: 'VardappY', titel: 'Vårdapp Y', organisation: { namn: 'Region Y' } };
+  const { behorigheter, fel } = behorigheterForSystem(sys, manifests, [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument' }, { tjanst: 'inera.tjanst.pot2', aktor: 'POT2Visning' }]);
+  assert.deepEqual(fel, []);
+  const cs = klientCapabilityStatement(sys, behorigheter, { miljo: 'test', datum: '2026-10-23' });
+  assert.equal(cs.kind, 'instance');
+  assert.equal(cs.rest[0].mode, 'client');
+  assert.deepEqual(cs.instantiates, ['https://fhir.inera.se/ig/npo/CapabilityStatement/NPOKonsumentCS|0.1.0', 'https://fhir.inera.se/ig/po-t2/CapabilityStatement/POT2VisningCS|0.1.0']);
+  assert.deepEqual(cs.rest[0].resource.find((r) => r.type === 'Condition').interaction, [{ code: 'search-type' }]);
+  assert.ok(cs.implementation.description);
+});
+
+test('statuskedjan: inga hopp, bevis krävs, produktion kräver testad i test', () => {
+  const mal = { tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument', miljo: 'test' };
+  assert.throws(() => overga([], mal, 'behorig'), /börjar som begärd/);
+  let a = overga([], mal, 'begard', { av: 'x', datum: '2026-10-23' });
+  assert.throws(() => overga(a, mal, 'testad'), /hoppar över/);
+  a = overga(a, mal, 'behorig', { av: 'automatiskt' });
+  assert.throws(() => overga(a, mal, 'testad'), /kräver bevis av typen testrapport/);
+  const prod = { ...mal, miljo: 'prod' };
+  assert.throws(() => overga(a, prod, 'ansokt'), /testad i testmiljön/);
+  a = overga(a, mal, 'testad', { bevis: [{ typ: 'testrapport', fil: 'rapport/x.md' }] });
+  a = overga(a, prod, 'ansokt');
+  assert.throws(() => overga(a, prod, 'godkand'), /beslut/);
+  a = overga(a, prod, 'godkand', { bevis: [{ typ: 'beslut', text: 'ok' }] });
+  assert.deepEqual(a.map((x) => [x.miljo, x.status]), [['test', 'testad'], ['prod', 'godkand']]);
+  assert.deepEqual(a[0].historik.map((h) => h.status), ['begard', 'behorig', 'testad']);
+  a = overga(a, prod, 'aterkallad');
+  assert.equal(nastaStatus(a[1]), null);
+  assert.throws(() => overga(a, { ...mal, miljo: 'stage' }, 'begard'), /Okänd miljö/);
+});
+
+test('WSO2-plan (torrkörning): bara behöriga roller, nycklar per miljö, återkallade tas bort', () => {
+  const manifests = loadManifests(loadWorkspace(root));
+  const sys = { system: 'VardappY', titel: 'Vårdapp Y' };
+  const roller = [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument' }, { tjanst: 'inera.tjanst.pot2', aktor: 'POT2Visning' }, { tjanst: 'inera.tjanst.journal1177', aktor: 'Journal1177Invanartjanst' }];
+  const { behorigheter } = behorigheterForSystem(sys, manifests, roller);
+  const ansl = [
+    { ...roller[0], miljo: 'test', status: 'behorig' },
+    { ...roller[1], miljo: 'test', status: 'begard' },
+    { ...roller[2], miljo: 'test', status: 'aterkallad' },
+  ];
+  const plan = wso2Plan(sys, behorigheter, ansl, { miljo: 'test' });
+  assert.equal(plan.torrkorning, true);
+  assert.deepEqual(plan.apiProdukter.map((p) => p.name), ['npo-NPOKonsument']);
+  assert.deepEqual(plan.vantar.map((v) => v.aktor), ['POT2Visning']);
+  assert.deepEqual(plan.borttag.map((b) => b.apiProdukt), ['journal1177-Journal1177Invanartjanst']);
+  assert.equal(plan.nycklar.keyType, 'SANDBOX');
+  assert.ok(plan.nycklar.scopes.every((s) => /^system\/[A-Za-z]+\.[cruds]$/.test(s)), 'nyckeln begär operationsscopen, en bokstav per scope');
+  const api = plan.apier.find((a) => a.name === 'npo-NPOKallsystem');
+  assert.deepEqual(api.operations.map((o) => `${o.verb} ${o.target}`), ['GET /CareTeam', 'GET /Encounter', 'GET /Provenance']);
+  assert.ok(plan.apier.find((a) => a.name === 'Tjanstekatalog').stodtjanst);
+  const prod = wso2Plan(sys, behorigheter, [{ ...roller[0], miljo: 'prod', status: 'godkand' }], { miljo: 'prod' });
+  assert.equal(prod.nycklar.keyType, 'PRODUCTION');
+  assert.ok(prod.prenumerationer.every((p) => p.kraverGodkannande));
+});
+
+test('systemanalysen bär anslutningarna per miljö', () => {
+  const j = analyseSystems(loadWorkspace(root), root).find((a) => a.system === 'JournalX');
+  const ans = j.behorighet.anslutningar;
+  assert.deepEqual(ans.map((a) => `${a.miljo}:${a.aktor}:${a.status}`), ['test:NPOKallsystem:testad', 'prod:NPOKallsystem:ansluten', 'test:NPOKonsument:behorig']);
+  assert.ok(ans.every((a) => !a.fel.length));
+  assert.equal(ans[2].kraverBevis, 'testrapport');
+  assert.ok(j.behorighet.miljoer.test.klientCs);
+  assert.deepEqual(j.behorighet.miljoer.prod.wso2.apiProdukter.map((p) => p.name), ['npo-NPOKallsystem']);
+});
+
+test('studion i testmiljöläge: anslut klient, bara test, ingen redigering', async () => {
+  const dir = kopieraArbetsyta();
+  const verktyg = { loadWorkspace, viewData, renderView, komponeraAlla, loadManifests, bygg: () => ({ status: 0, logg: '' }) };
+  const test = await startaStudio({ root: dir, port: 0, miljo: 'test', verktyg });
+  const vanlig = await startaStudio({ root: dir, port: 0, verktyg });
+  const anrop = (server, metod, sokvag, body) => fetch(`http://127.0.0.1:${server.address().port}${sokvag}`, {
+    method: metod, headers: { 'x-studio': '1', 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const begaran = { system: 'VardappY', titel: 'Vårdapp Y', organisation: { namn: 'Region Y' }, roller: [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument', informationsmangder: ['VardkontaktInfo'] }] };
+  try {
+    const html = await (await fetch(`http://127.0.0.1:${test.address().port}/`)).text();
+    const data = JSON.parse(html.match(/const DATA = (.*);\n/)[1]);
+    assert.equal(data.studio.miljo, 'test');
+    assert.deepEqual(data.studio.konsumentroller['inera.tjanst.npo'], ['NPOKonsument']);
+    assert.equal((await anrop(test, 'PUT', '/api/system/JournalX', {})).status, 403, 'system redigeras inte i testläget');
+    assert.equal((await anrop(vanlig, 'POST', '/api/anslut', begaran)).status, 403, 'klienter ansluts bara i testläget');
+    assert.equal((await anrop(test, 'POST', '/api/anslut', { ...begaran, roller: [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKallsystem' }] })).status, 400, 'bara konsumentroller');
+    const f = await (await anrop(test, 'POST', '/api/anslut/forhandsgranska', begaran)).json();
+    assert.ok(!f.scopes.includes('system/CareTeam.s'));
+    assert.equal(f.wso2.nycklar.keyType, 'SANDBOX');
+    assert.equal((await anrop(test, 'POST', '/api/anslut', begaran)).status, 200);
+    const sys = loadSystems(dir).find((s) => s.system === 'VardappY');
+    assert.deepEqual(sys.roller, [{ tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument' }]);
+    assert.deepEqual(sys.anslutningar.map((a) => [a.miljo, a.status, a.informationsmangder]), [['test', 'behorig', ['VardkontaktInfo']]]);
+    assert.deepEqual(sys.anslutningar[0].historik.map((h) => h.av), ['Region Y', 'automatiskt i testmiljön']);
+    const status = (server, b) => anrop(server, 'POST', '/api/anslutning/status', { system: 'VardappY', tjanst: 'inera.tjanst.npo', aktor: 'NPOKonsument', ...b });
+    assert.equal((await status(test, { miljo: 'test', status: 'testad', bevis: [{ typ: 'testrapport', fil: 'rapport/finns-inte.md' }] })).status, 400);
+    fs.mkdirSync(path.join(dir, 'rapport'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'rapport', 'test.md'), '# test\n');
+    assert.equal((await status(test, { miljo: 'test', status: 'testad', bevis: [{ typ: 'testrapport', fil: 'rapport/test.md' }] })).status, 200);
+    assert.equal((await status(test, { miljo: 'prod', status: 'ansokt' })).status, 400, 'testläget rör inte produktion');
+    assert.equal((await status(vanlig, { miljo: 'prod', status: 'ansokt' })).status, 200);
+    const text = fs.readFileSync(path.join(dir, 'system', 'vardapp-y.yaml'), 'utf8');
+    assert.match(text, /- \{ status: testad, datum: [0-9-]+, av: studio \(test\) \}/, 'historiken skrivs en rad per post');
+  } finally {
+    test.close();
+    vanlig.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

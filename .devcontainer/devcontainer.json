@@ -20,6 +20,7 @@
   "postCreateCommand": "npm ci --prefix verktyg && gem install jekyll --no-document && (node verktyg/ig-composer.mjs bygg || true)",
   "forwardPorts": [
     4900,
+    4901,
     4800,
     8080
   ],
@@ -27,6 +28,9 @@
     "4900": {
       "label": "Studio",
       "onAutoForward": "openBrowser"
+    },
+    "4901": {
+      "label": "Studio, testmiljö"
     },
     "4800": {
       "label": "Mockad federation"

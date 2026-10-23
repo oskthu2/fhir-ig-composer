@@ -1,7 +1,8 @@
 # Tillägg för devcontainern: arbetsytan monteras från repot, och studion
 # körs som containerns egen process. Den väntar tills postCreateCommand har
 # installerat verktygets beroenden och startas om om den avslutas. Loggen
-# finns i /tmp/studio.log.
+# finns i /tmp/studio.log. Studion i testmiljöläge körs i samma container på
+# port 4901, med loggen i /tmp/studio-test.log.
 # Sökvägar räknas från den första compose-filens katalog (repots rot), inte
 # från denna fil.
 services:
@@ -12,6 +13,12 @@ services:
       - sh
       - -c
       - |
+        while true; do
+          if [ -d verktyg/node_modules/yaml ]; then
+            node verktyg/ig-composer.mjs studio --miljo test --port 4901 >> /tmp/studio-test.log 2>&1
+          fi
+          sleep 5
+        done &
         while true; do
           if [ -d verktyg/node_modules/yaml ]; then
             node verktyg/ig-composer.mjs studio >> /tmp/studio.log 2>&1

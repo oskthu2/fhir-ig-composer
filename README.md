@@ -33,8 +33,8 @@ Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak o
 | Sätt | Vad du får | Så här |
 |---|---|---|
 | **Bara titta** | Vyn (`vy.html`), utan redigering | Actions → *Bygg och testa* → senaste körningen → artefakten **matrisvy** → öppna `vy.html` |
-| **Codespaces** | Studion, mocken och definitionsregistret i webbläsaren, inget att installera | *Code* → *Codespaces* → *Create codespace*. Studion öppnas på port 4900 när bygget är klart. |
-| **Docker lokalt** | Samma sak på din dator; behövs mot interna testmiljöer | `docker compose up` → http://localhost:4900/ (studio) och http://localhost:8080/fhir (register) |
+| **Codespaces** | Studion, mocken och definitionsregistret i webbläsaren, inget att installera | *Code* → *Codespaces* → *Create codespace*. Studion öppnas på port 4900 när bygget är klart; studion i testmiljöläge finns på port 4901. |
+| **Docker lokalt** | Samma sak på din dator; behövs mot interna testmiljöer | `docker compose up` → http://localhost:4900/ (studio), http://localhost:4901/ (studio, testmiljö) och http://localhost:8080/fhir (register) |
 | **Node lokalt** | Allt utom registret | Node ≥ 20 och `npm i -g fsh-sushi@3`, sedan kommandona under *Bygga* och `node verktyg/ig-composer.mjs studio` |
 
 Devcontainern (`.devcontainer/`) och `docker-compose.yml` beskriver samma miljö: tjänsten `studio` (Node, SUSHI, git; i devcontainern även Java och Jekyll för IG Publisher) med arbetsytan monterad, och tjänsten `register` (HAPI FHIR R5). Studion skriver i dina filer, så ändringar syns i `git status` som vanligt.
@@ -271,6 +271,66 @@ Studion är matrisvyn med redigering. Källan är fortsatt filerna i git: studio
 
 Skrivningar kräver huvudet `X-Studio`, så att en annan webbsida inte kan skriva via studion. Studion lyssnar bara på 127.0.0.1 om inte `STUDIO_VARD` säger annat.
 
+## Anslutningar per miljö: deklarerat, godkänt och behörigt
+
+Tre saker hålls isär:
+
+| | Vad | Var |
+|---|---|---|
+| **Deklarerat** | Vad systemet säger att det kan | Serverns `CapabilityStatement` på `/metadata` (nuläget); för en klient det genererade klient-`CapabilityStatement` |
+| **Godkänt** | Vilka roller systemet är godkänt för, per miljö | `anslutningar` i `system/<namn>.yaml` |
+| **Behörigt** | Vad systemet får anropa | Scopes i åtkomstintyget, härledda ur IG:erna; i WSO2 prenumerationer och nycklar |
+
+En anslutning gäller en roll (tjänst och aktör) i en miljö och går genom en statuskedja. Varje övergång loggas i historiken.
+
+| Miljö | Kedja | Bevis och villkor |
+|---|---|---|
+| test | begärd → behörig → testad | *testad* kräver en testrapport |
+| prod | ansökt → godkänd → ansluten | *ansökt* kräver att rollen är testad i test; *godkänd* kräver ett beslut |
+
+Alla kan *återkallas*. Behörigheten (scopes, nycklar) gäller från *behörig* i test och från *godkänd* i produktion. Producenterna behöver ingen klientlista: de litar på åtkomstintyget och kontrollerar dess scopes.
+
+```yaml
+anslutningar:
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKonsument
+    miljo: test
+    status: behorig
+    informationsmangder: [VardkontaktInfo]   # valfritt: smalna av
+    historik:
+      - { status: begard, datum: 2026-10-20, av: Region Exempel }
+      - { status: behorig, datum: 2026-10-20, av: automatiskt i testmiljön }
+```
+
+**Scopes ur IG:erna.** Varje tjänsteaktörs klient-`CapabilityStatement` säger vilka resurstyper och interaktioner rollen behöver. Verktyget tar fram vem som tar emot varje anrop (tjänstens producentroll eller en stödtjänst, ur aktörernas serverförmågor) och scopes enligt SMART v2 (`system/Encounter.s`, `system/AuditEvent.c`). Det är taket för rollen; ett system kan smalna av genom att välja bort informationsmängder, aldrig vidga. Fliken *Behörigheter* i en tjänst visar scopen per aktör.
+
+**Klient-CapabilityStatement.** För ett system och dess roller genereras ett `CapabilityStatement` med `kind = instance`, `mode = client` och `instantiates` som pekar på rollernas förmågor i tjänste-IG:erna. Det är klientens deklaration (en klient har ingen `/metadata`).
+
+**WSO2, torrkörning.** För varje miljö tas en plan fram för WSO2 API Manager: ett API per mottagare med operationer och scopes, en API Product per roll (så att en prenumeration motsvarar en roll), en applikation per system och miljö, prenumerationer och nycklar (client credentials; `SANDBOX` i test, `PRODUCTION` i prod, där prenumerationerna kräver godkännande). Planen listar anropen som skulle göras (API Manager 4.x: Publisher v4, DevPortal v3); inga anrop görs.
+
+```sh
+node verktyg/ig-composer.mjs anslutning                       # statuskedjan per system
+node verktyg/ig-composer.mjs scopes inera.tjanst.npo           # scopes per tjänsteaktör
+node verktyg/ig-composer.mjs scopes JournalX --miljo test      # scopes för ett system
+node verktyg/ig-composer.mjs klient JournalX --miljo test      # klient-CapabilityStatement
+node verktyg/ig-composer.mjs wso2 JournalX --miljo test        # WSO2-plan → rapport/wso2-JournalX-test.json
+```
+
+### Studion i testmiljöläge: Anslut klient (test)
+
+```sh
+node verktyg/ig-composer.mjs studio --miljo test --port 4901  # eller STUDIO_MILJO=test
+```
+
+Testmiljöläget är studion för den som ansluter en klient. Där finns *＋ Anslut klient (test)*:
+
+1. Välj ett befintligt system eller ange ett nytt (namn, titel, organisation, HSA-id).
+2. Välj tjänsterna att konsumera. Bara konsumentroller (klient- men inga serverförmågor) är valbara. Informationsmängder kan väljas bort.
+3. Granska scopen per mottagare, klient-`CapabilityStatement` (går att ladda ned) och WSO2-planen.
+4. *Begär testbehörighet*: rollerna läggs till systemet och anslutningarna i test förs begärd → behörig direkt.
+
+Nästa steg, *testad*, tas i fliken *Anslutningar per miljö* med en testrapport som bevis. I testmiljöläget går det bara att skriva anslutningar i test; IG:ar, flöden och systemens roller i övrigt redigeras inte, och produktionsanslutningar ändras i den vanliga studion.
+
 ## Flöden: en styrande källa, två diagram
 
 Ett flöde skrivs en gång i skissformatet (för hand eller i studion) och kompileras till FHIR. Allt annat utgår från de resurserna:
@@ -342,14 +402,14 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 │   ├── npo/                   inera.tjanst.npo         (tjänst, publik)   – SVOD × Patientöversikt
 │   ├── journal1177/           inera.tjanst.journal1177 (tjänst, publik)   – Individuell tillgång × (Patientöversikt + Labbsvar)
 │   └── po-t2/                 inera.tjanst.pot2        (tjänst, publik)   – Patientöversiktsfederationen × Patientöversikt (T2)
-├── system/                    konkreta system: roller, tillval, informationsmängder, ändpunkter och nuläge
+├── system/                    konkreta system: roller, tillval, informationsmängder, ändpunkter, nuläge och anslutningar per miljö
 │   └── nulage/                CapabilityStatement (kind=instance) och T2-katalogerna
 ├── miljoer/                   verkliga T2-realiseringar för läsadaptern (infopeak.yaml)
 ├── externa/                   ögonblicksbilder av externa specifikationer (CC0)
 ├── verktyg/                   ig-composer (Node ≥ 20): komposition, studio, mock, läsadapter, register, Mermaid
 ├── .devcontainer/             Codespaces och VS Code Dev Containers
 ├── Dockerfile                 studion i en container
-└── docker-compose.yml         studio + definitionsregister (HAPI FHIR R5)
+└── docker-compose.yml         studio, studio i testmiljöläge + definitionsregister (HAPI FHIR R5)
 ```
 
 Varje katalog under `konventioner/`, `byggblock/`, `federationer/`, `stodtjanster/` och `tjanster/` är en egen IG. Här är **verktyget och konventionerna** hemma. Byggblock, federationer och tjänster ligger i samma repo så länge det är en prototyp, så att allt går att bygga från början till slut. Längre fram kan de bli egna repon som komponeras hit via arbetsytan, eller läses från definitionsregistret.
@@ -483,7 +543,10 @@ Federationen Individuell tillgång låter källsystemet antingen *märka* inform
 - Loggåtkomst som byggblock i 1177 Journal, och journalanteckningar i båda tjänsterna.
 - Registrera tjänsternas genererade specifikationer per informationsmängd (`kind=requirements`) i tjänstekatalogen.
 - Läsadaptern mot fler miljöer (testmiljöer i WSO2 APIM), och ett skrivläge för testmiljöer där förutsättningarna får registreras.
-- Riktiga åtkomstintyg: utfärdaren som anslutningspunkten anvisar, i stället för gatewayns token.
+- Riktiga åtkomstintyg: utfärdaren som anslutningspunkten anvisar, i stället för gatewayns token, med scopen ur anslutningarna.
+- WSO2-adaptern skarpt mot en testinstans (adress och inloggning via miljövariabler), först idempotent skapande av API Products och prenumerationer; scopenamnen stäms av mot installationen.
+- Testad som bevis direkt från federationstestet: en körning där klienten bara använder det den deklarerat ger testrapporten.
+- Anslutningsregistret i HAPI i stället för i `system/*.yaml`, så att åtkomstintygstjänsten kan läsa det.
 - Härleda konsumentroller ur katalogen (registrerade klienter) så att även konsumentsidan kan provas mot en realisering.
 - Validera svaren mot profilerna (FHIR-valideraren) i federationstestet.
 - Testskript: generera `TestScript` per system ur testlistan.

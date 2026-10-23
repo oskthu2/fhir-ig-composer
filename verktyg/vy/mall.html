@@ -34,6 +34,8 @@
   --utelamnat: #b0413e;
   --shall: #22201e;
   --should: #6b6660;
+  --test: #a8570c;
+  --test-bg: #fbeedd;
   --skugga: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 4%);
 }
 @media (prefers-color-scheme: dark) {
@@ -63,6 +65,8 @@
     --utelamnat: #e88480;
     --shall: #ecebe8;
     --should: #a39e97;
+    --test: #f0a35e;
+    --test-bg: #3a2a1a;
     --skugga: none;
     color-scheme: dark;
   }
@@ -74,6 +78,7 @@
   --stodtjanst: #6cc7c3; --stodtjanst-bg: #1c3332;
   --lokal: #6cc38f; --kopierad: #7fb0ec; --genererad: #b597e6; --ruleset: #a9b0ba; --refererad: #d9b77a;
   --utelamnat: #e88480; --shall: #ecebe8; --should: #a39e97; --skugga: none;
+  --test: #f0a35e; --test-bg: #3a2a1a;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -265,6 +270,25 @@ textarea.falt { min-height: 54px; resize: vertical; }
 .paret { display: grid; grid-template-columns: minmax(100px, 160px) 1fr auto; gap: 6px; margin: 4px 0; }
 pre.yaml { background: var(--yta2); border-radius: 8px; padding: 10px; overflow: auto; max-height: 420px; font-size: 0.8rem; }
 .meddelande { border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: var(--yta2); }
+/* Anslutningar och testmiljöläge */
+.testband { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; background: var(--test-bg); color: var(--test); border-radius: 10px; padding: 8px 14px; margin: 0 0 10px; font-weight: 600; }
+.testband .svag { color: inherit; opacity: 0.85; font-weight: 400; }
+.testmiljo .studiorad { border-color: color-mix(in srgb, var(--test) 60%, var(--kant)); }
+.testmiljo h1::after { content: ' · testmiljö'; color: var(--test); }
+.miljo { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 6px; white-space: nowrap; }
+.miljo.test { background: var(--test-bg); color: var(--test); }
+.miljo.prod { background: var(--tjanst-bg); color: var(--tjanst); }
+.kedja { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.kedja .steg { font-size: 0.75rem; padding: 1px 8px; border-radius: 999px; border: 1px dashed var(--kant); color: var(--svag); white-space: nowrap; }
+.kedja .steg.nadd { border: 1px solid transparent; background: color-mix(in srgb, var(--lokal) 15%, transparent); color: var(--lokal); }
+.kedja .steg.nu { font-weight: 700; border-color: var(--lokal); }
+.kedja .pil { color: var(--svag); font-size: 0.75rem; }
+.scopes { display: flex; flex-wrap: wrap; gap: 4px; }
+.scopes code { font-size: 0.78rem; background: var(--yta2); border-radius: 5px; padding: 1px 6px; }
+.guide h3 { display: flex; gap: 8px; align-items: center; }
+.guide h3 .nr { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--test-bg); color: var(--test); font-size: 0.8rem; }
+.rollval { border: 1px solid var(--kant); border-radius: 10px; padding: 8px 12px; margin: 6px 0; }
+.rollval .kryss { margin: 6px 0 0 24px; }
 @media (max-width: 760px) { .stegrad { grid-template-columns: 28px 1fr 1fr; } .formular { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
   main { padding-top: 16px; }
@@ -504,7 +528,7 @@ function flikar(p, lista) {
 
 function ritaIg(p, id) {
   p.append(igHuvud(id));
-  if (STUDIO) p.append(studioKnappar(id));
+  if (REDIGERA) p.append(studioKnappar(id));
   const m = M[id];
   if (!m) {
     p.append(el('p', { class: 'tom' }, 'Ingen komposition.json för denna IG. Kör ', el('code', {}, 'ig-composer bygg'), ' och sedan ', el('code', {}, 'ig-composer vy'), '.'));
@@ -521,6 +545,7 @@ function ritaIg(p, id) {
     ucs.length && { id: 'uc', titel: 'Användningsfall', antal: ucs.filter((u) => u.typ === 'anvandningsfall').length, rita: (c) => ritaAnvandningsfall(c, m) },
     ig(id).roll === 'tjanst' && ucs.length && { id: 'till', titel: 'Tillämpning', antal: tillampadeSteg(m).length, rita: (c) => ritaTillampning(c, m) },
     m.kravprofiler.length && { id: 'krav', titel: 'Kravprofiler', antal: m.kravprofiler.length, rita: (c) => ritaKrav(c, m) },
+    DATA.behorigheter?.[id] && { id: 'beh', titel: 'Behörigheter', antal: DATA.behorigheter[id].length, rita: (c) => ritaIgBehorigheter(c, id) },
     { id: 'art', titel: 'Vad kommer med var', antal: allaArt.length, rita: (c) => ritaArtefakter(c, allaArt) },
     { id: 'prof', titel: 'Exponerade profiler', antal: m.exponerade.length, rita: (c) => ritaProfiler(c, m) },
     { id: 'paket', titel: 'Komponerade paket', antal: m.paket.length, rita: (c) => ritaKomponerade(c, m) },
@@ -623,7 +648,7 @@ function ritaAnvandningsfall(c, m) {
       el('span', { class: 'etikett' }, u.niva === 'logisk' ? 'Logiskt arbetsflöde · PlanDefinition' : 'Tillämpat flöde · ExampleScenario'),
       u.tillampar ? el('span', { class: 'etikett mono', title: u.tillampar }, `tillämpar ${u.tillampar.split('/').pop()}`) : null),
     el('p', { class: 'svag liten' }, `${u.typ === 'delflode' ? 'Delflöde' : 'Användningsfall'} `, artLänk(m.ig.id, u.namn), ` · skiss: `, el('code', {}, `${u.fil}`), ` i `, kort(u.paket),
-      skiss ? el('button', { class: 'knapp', style: 'margin-left:10px', onclick: () => redigera({ typ: 'skiss', ig: skiss.ig, fil: skiss.fil, doc: structuredClone(skiss.doc), tillbaka: { ...state } }) }, 'Redigera skissen') : null),
+      skiss && REDIGERA ? el('button', { class: 'knapp', style: 'margin-left:10px', onclick: () => redigera({ typ: 'skiss', ig: skiss.ig, fil: skiss.fil, doc: structuredClone(skiss.doc), tillbaka: { ...state } }) }, 'Redigera skissen') : null),
     mermaid ? el('details', {}, el('summary', { class: 'svag liten' }, u.niva === 'logisk' ? 'Mermaid: simbanor ur PlanDefinition, samma som på IG:ns sida Arbetsflöden' : 'Mermaid: sekvens ur ExampleScenario, samma som på IG:ns sida Användningsfall'),
       el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: (e) => {
         const knapp = e.target;
@@ -763,7 +788,7 @@ function ritaTillampning(c, m) {
         el('td', { class: 'mono liten' }, s.operation ? [s.operation, s.profil || s.resurstyp].filter(Boolean).join(' ') : el('span', { class: 'nej' }, 'obunden')),
         el('td', {}, s.specifikation ? artLänk(m.ig.id, s.specifikation) : '–'),
         el('td', {}, el('span', { class: `status ${överstyrd(s) ? 'delvis' : s.operation ? 'ok' : 'saknas'}` }, BINDNING[s.bindning] || 'saknas'),
-          STUDIO ? tillampningsVal(m, s) : null),
+          REDIGERA ? tillampningsVal(m, s) : null),
       ))),
     )));
   }
@@ -808,7 +833,8 @@ function ritaSystemlista() {
   a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap ? el('span', { class: 'status saknas' }, `${a.sammanfattning.apiGap + a.sammanfattning.anslutningarGap} gap`) : null);
   s.replaceChildren(
     el('h3', {}, 'System i systemregistret'), el('div', {}, SYSTEM.filter((a) => !a.miljö).map(chip),
-      STUDIO ? el('button', { class: 'chip igchip r-konvention', onclick: () => redigera({ typ: 'system', namn: '', tillbaka: { ...state } }) }, '＋ Nytt system') : null),
+      REDIGERA ? el('button', { class: 'chip igchip r-konvention', onclick: () => redigera({ typ: 'system', namn: '', tillbaka: { ...state } }) }, '＋ Nytt system') : null,
+      TESTLÄGE ? el('button', { class: 'chip igchip r-konvention', onclick: () => anslutKlient() }, '＋ Anslut klient (test)') : null),
     ...MILJÖER.map((k) => el('div', {}, el('h3', { style: 'margin-top:12px' }, `System i ${k.miljo.titel}`),
       el('div', {}, SYSTEM.filter((a) => a.miljö?.namn === k.miljo.namn).map(chip)),
       el('p', { class: 'svag liten', style: 'margin:6px 0 0' }, `Härledda ur katalogerna, läsläge, ${new Date(k.genererad).toLocaleString('sv-SE')}.`))),
@@ -822,7 +848,8 @@ function ritaSystem(p, namn) {
   const vald = (lista) => lista.some((r) => valda.has(r));
   p.append(
     el('div', { class: 'panelhuvud' }, el('h2', {}, a.titel), el('span', { class: 'svag' }, orgText(a.organisation)),
-      STUDIO && !a.miljö ? el('button', { class: 'knapp', onclick: () => redigera({ typ: 'system', namn: a.system, tillbaka: { ...state } }) }, 'Redigera systemet') : null),
+      REDIGERA && !a.miljö ? el('button', { class: 'knapp', onclick: () => redigera({ typ: 'system', namn: a.system, tillbaka: { ...state } }) }, 'Redigera systemet') : null,
+      TESTLÄGE && !a.miljö ? el('button', { class: 'knapp', onclick: () => anslutKlient(a.system) }, 'Anslut fler tjänster (test)') : null),
     el('div', { class: 'etiketter' }, a.miljö ? el('span', { class: 'etikett' }, `härlett ur ${a.miljö.titel}`) : el('span', { class: 'etikett mono' }, a.fil),
       ...a.andpunkter.map((u) => el('span', { class: 'etikett mono' }, u)),
       el('span', { class: 'etikett' }, a.nulage.finns ? `nuläge: ${a.nulage.fil || 'GET /metadata'}` : 'inget nuläge inlämnat')),
@@ -851,7 +878,8 @@ function ritaSystem(p, namn) {
     { id: 'elm', titel: 'Elementkrav', antal: a.element.filter((e) => vald(e.roller)).length, rita: (c) => ritaSystemElement(c, a, valda) },
     { id: 'krv', titel: 'Verksamhetskrav', antal: a.krav.filter((q) => vald(q.roller)).length, rita: (c) => ritaSystemKrav(c, a, valda) },
     { id: 'scn', titel: 'Användningsfall', antal: a.scenarier.filter((x) => valda.has(x.roll)).length, rita: (c) => ritaSystemScenarier(c, a, valda) },
-    { id: 'ans', titel: 'Anslutningar', antal: ansl.length, rita: (c) => ritaSystemAnslutningar(c, a, valda) },
+    !a.miljö && { id: 'beh', titel: 'Anslutningar per miljö', antal: a.behorighet?.anslutningar.length || 0, rita: (c) => ritaBehorighet(c, a) },
+    { id: 'ans', titel: 'T2-registreringar', antal: ansl.length, rita: (c) => ritaSystemAnslutningar(c, a, valda) },
     { id: 'test', titel: 'Testlista', antal: tester.length, rita: (c) => ritaTestlista(c, a, tester) },
     a.körning && { id: 'fed', titel: 'Federationstest', antal: a.körning.korningar.filter((k) => k.system === (a.källsystem || a.system) && valda.has(k.roll)).length, rita: (c) => ritaFederationstest(c, a, valda) },
     a.körning?.specifikationer && { id: 'spec', titel: 'Specifikationer', antal: specifikationerFor(a).length, rita: (c) => ritaSpecifikationer(c, a) },
@@ -1142,7 +1170,7 @@ function ritaDiagnostik(c, m) {
 
 function ritaPaket(p, id) {
   p.append(igHuvud(id));
-  if (STUDIO) p.append(studioKnappar(id));
+  if (REDIGERA) p.append(studioKnappar(id));
   const i = ig(id);
   const användning = användsI.get(id) || [];
   const härifrån = [...artefakter.values()].filter((a) => a.paket === id);
@@ -1265,6 +1293,9 @@ sökfält.addEventListener('blur', () => setTimeout(stängSök, 100));
 // IG:arnas komposition kan redigeras. Servern skriver filerna, komponerar om
 // och sidan laddas om med det nya resultatet.
 const STUDIO = DATA?.studio || null;
+// Testmiljöläge: bara anslutningsflödet skriver; IG:ar, flöden och system redigeras inte.
+const TESTLÄGE = STUDIO?.miljo === 'test';
+const REDIGERA = !!STUDIO && !TESTLÄGE;
 const SENASTE = 'ig-composer-studio-senaste';
 const OPERATIONER = ['', 'read', 'search-type', 'search-system', 'create', 'update', 'capabilities', 'token'];
 const KAN_KOMPONERA = { tjanst: ['konvention', 'byggblock', 'federation'], byggblock: ['konvention', 'byggblock'], federation: ['konvention', 'stodtjanst'], stodtjanst: ['konvention', 'stodtjanst'] };
@@ -1300,6 +1331,7 @@ function ritaRedigering(p) {
   if (r.typ === 'system') return ritaSystemRedigering(p, r);
   if (r.typ === 'skiss') return ritaSkissRedigering(p, r);
   if (r.typ === 'komposition') return ritaKompositionRedigering(p, r);
+  if (r.typ === 'anslut') return ritaAnslutKlient(p, r);
 }
 const kebab = (s) => String(s).replace(/([a-zåäö0-9])([A-ZÅÄÖ])/g, '$1-$2').toLowerCase().replace(/[åä]/g, 'a').replace(/ö/g, 'o').replace(/[^a-z0-9-]/g, '-');
 const falt = (attrs, värde, sätt) => el('input', { class: 'falt', value: värde ?? '', oninput: (e) => sätt(e.target.value), ...attrs });
@@ -1331,8 +1363,11 @@ function ritaStudiorad() {
   try { senaste = JSON.parse(sessionStorage.getItem(SENASTE) || 'null'); } catch { senaste = null; }
   const ä = STUDIO.andringar;
   s.replaceChildren(
-    el('h3', {}, 'Studio'),
-    el('p', { class: 'svag liten' }, 'Redigera system, användningsfall och komposition. Ändringarna skrivs till filerna i arbetsytan och IG:arna komponeras om direkt (utan SUSHI). Granska och committa som vanligt.'),
+    TESTLÄGE ? el('div', { class: 'testband' }, miljöEl('test'), 'Testmiljöläge',
+      el('span', { class: 'svag liten' }, 'Här ansluts klienter till testmiljön. IG:ar, flöden och system redigeras inte, och WSO2 körs som torrkörning.')) : el('h3', {}, 'Studio'),
+    TESTLÄGE ? el('div', { class: 'knapprad' }, el('button', { class: 'knapp primar', onclick: () => anslutKlient() }, '＋ Anslut klient (test)'),
+      el('span', { class: 'svag liten' }, 'Välj tjänster att konsumera. Klientförmåga, scopes och WSO2-plan tas fram ur tjänsternas IG:er.'))
+      : el('p', { class: 'svag liten' }, 'Redigera system, användningsfall och komposition. Ändringarna skrivs till filerna i arbetsytan och IG:arna komponeras om direkt (utan SUSHI). Granska och committa som vanligt.'),
     senaste ? el('div', { class: 'meddelande' },
       `Sparat ${senaste.fil} ${new Date(senaste.tid).toLocaleTimeString('sv-SE')}: `,
       senaste.fel?.length ? el('span', { class: 'nej' }, `${senaste.fel.length} fel`) : el('span', { class: 'ok' }, 'inga fel'),
@@ -1342,14 +1377,14 @@ function ritaStudiorad() {
     el('details', {}, el('summary', {}, `Ändrade filer (${ä.length})`),
       ä.length ? el('ul', { class: 'träd' }, ä.map((x) => el('li', { style: 'display:block' },
         el('span', { class: 'etikett mono' }, x.status), ' ', el('span', { class: 'mono' }, x.fil), ' ',
-        el('button', { class: 'länk liten', onclick: (e) => { if (confirm(`Återställ ${x.fil}?`)) spara(e.target, 'POST', '/api/aterstall', { fil: x.fil }, state); } }, 'återställ'),
+        REDIGERA ? el('button', { class: 'länk liten', onclick: (e) => { if (confirm(`Återställ ${x.fil}?`)) spara(e.target, 'POST', '/api/aterstall', { fil: x.fil }, state); } }, 'återställ') : null,
         x.diff ? el('details', {}, el('summary', { class: 'svag liten' }, 'diff'), el('pre', { class: 'yaml' }, x.diff)) : null))) : el('p', { class: 'svag liten' }, 'Inga ändringar mot git.')),
-    el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: async (e) => {
+    REDIGERA ? el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: async (e) => {
       const k = e.target;
       k.disabled = true; k.textContent = 'Bygger med SUSHI …';
       try { const r = await api('POST', '/api/bygg'); k.after(el('details', { open: true }, el('summary', {}, `Bygget avslutades med kod ${r.status}`), el('pre', { class: 'yaml' }, r.logg))); } catch (err) { k.after(el('div', { class: 'meddelande nej' }, err.message)); }
       k.disabled = false; k.textContent = 'Bygg med SUSHI (exempel, sidor, diagram)';
-    } }, 'Bygg med SUSHI (exempel, sidor, diagram)'), el('span', { class: 'svag liten' }, 'Behövs för IG-sidorna, Mermaid-diagrammen och exemplen i den mockade federationen.')),
+    } }, 'Bygg med SUSHI (exempel, sidor, diagram)'), el('span', { class: 'svag liten' }, 'Behövs för IG-sidorna, Mermaid-diagrammen och exemplen i den mockade federationen.')) : null,
   );
 }
 
@@ -1578,6 +1613,204 @@ function ritaKompositionRedigering(p, r) {
   p.append(el('div', { class: 'knapprad' }, knapp, el('button', { class: 'knapp', onclick: avbryt }, 'Avbryt')));
 }
 
+// ---- anslutningar per miljö, behörigheter och klientanslutning
+const MILJÖTITEL = { test: 'Test', prod: 'Produktion' };
+const miljöEl = (m) => el('span', { class: `miljo ${m}` }, MILJÖTITEL[m] || m);
+const scopesEl = (lista) => el('span', { class: 'scopes' }, lista.length ? lista.map((x) => el('code', {}, x)) : el('span', { class: 'svag liten' }, 'inga'));
+const kedjaEl = (a) => el('span', { class: 'kedja' },
+  a.kedja.flatMap((k, i) => [i ? el('span', { class: 'pil', 'aria-hidden': 'true' }, '→') : null,
+    el('span', { class: `steg${k.nadd ? ' nadd' : ''}${k.status === a.status ? ' nu' : ''}`, title: k.datum ? `${k.titel} ${k.datum}` : k.titel }, k.titel)]).filter(Boolean),
+  a.status === 'aterkallad' ? el('span', { class: 'status saknas' }, 'återkallad') : null);
+function laddaNed(namn, obj) {
+  const a = el('a', { href: URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2) + '\n'], { type: 'application/json' })), download: namn });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+// Scopes per roll och mottagare.
+function ritaScopes(behorigheter) {
+  return el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, ['Roll', 'Mottagare', 'Scopes'].map((h) => el('th', {}, h)))),
+    el('tbody', {}, behorigheter.flatMap((b) => [
+      ...b.mottagare.map((x, i) => el('tr', {},
+        el('td', {}, i ? '' : el('span', {}, prick(b.tjanst), ' ', b.titel, b.bortvalda?.length ? el('div', { class: 'via' }, `bortvalt: ${b.bortvalda.join(', ')}`) : null)),
+        el('td', {}, x.titel, x.stodtjanst ? el('span', { class: 'svag liten' }, ' · stödtjänst') : null),
+        el('td', {}, scopesEl(x.scopes)))),
+      ...(b.mottagare.length ? [] : [el('tr', {}, el('td', {}, b.titel), el('td', { colspan: 2, class: 'svag' }, 'Inga klientanrop.'))]),
+    ]))));
+}
+function ritaKlientCs(cs, öppen = false) {
+  if (!cs) return null;
+  return el('details', { open: öppen }, el('summary', {}, 'Klient-CapabilityStatement ', el('span', { class: 'svag liten' }, `kind=instance · instantiates ${cs.instantiates.length}`)),
+    el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: () => laddaNed(`CapabilityStatement-${cs.id}.json`, cs) }, 'Ladda ned JSON'),
+      el('span', { class: 'svag liten' }, 'Klientens deklaration: vad den kommer att anropa, hämtat ur rollernas förmågor.')),
+    el('pre', { class: 'yaml' }, JSON.stringify(cs, null, 2)));
+}
+function ritaWso2(plan, öppen = false) {
+  if (!plan) return null;
+  return el('details', { open: öppen },
+    el('summary', {}, `WSO2-plan (torrkörning) `, el('span', { class: 'svag liten' },
+      `${plan.apier.length} API:er · ${plan.apiProdukter.length} API Products · ${plan.prenumerationer.length} prenumerationer${plan.nycklar ? ` · nycklar ${plan.nycklar.keyType}` : ''}`)),
+    el('ul', { class: 'liten svag' }, plan.anmarkningar.map((x) => el('li', {}, x))),
+    plan.vantar.length ? el('p', { class: 'liten' }, 'Väntar på behörighet: ', plan.vantar.map((v) => `${v.aktor} (${STATUSTITEL[v.status] || v.status})`).join(', ')) : null,
+    plan.apiProdukter.length ? el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['API Product', 'API:er och operationer'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, plan.apiProdukter.map((p) => el('tr', {},
+        el('td', {}, el('span', { class: 'mono' }, p.name), el('div', { class: 'via' }, p.titel)),
+        el('td', {}, p.apis.map((a) => el('div', { class: 'liten' }, el('span', { class: 'mono' }, a.name), ': ', a.operations.map((o) => `${o.verb} ${o.target}`).join(', '))))))))) : null,
+    el('h4', {}, 'Anrop som skulle göras'),
+    el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['Metod', 'Sökväg', 'Vad'].map((h) => el('th', {}, h)))),
+      el('tbody', {}, plan.anrop.map((a) => el('tr', {}, el('td', { class: 'mono' }, a.metod), el('td', { class: 'mono liten' }, a.sokvag), el('td', {}, a.beskrivning)))))),
+    el('div', { class: 'knapprad' }, el('button', { class: 'knapp', onclick: () => laddaNed(`wso2-${plan.system}-${plan.miljo}.json`, plan) }, 'Ladda ned planen')));
+}
+const STATUSTITEL = { begard: 'begärd', behorig: 'behörig', testad: 'testad', ansokt: 'ansökt', godkand: 'godkänd', ansluten: 'ansluten', aterkallad: 'återkallad' };
+const BEVISTITEL = { testrapport: 'testrapport', beslut: 'beslut' };
+
+// Nästa steg i kedjan, i studion. Testmiljöläget rör bara test.
+function nästaSteg(sys, a) {
+  if (!STUDIO || a.fel.length || (TESTLÄGE && a.miljo !== 'test')) {
+    return a.nasta ? el('span', { class: 'svag liten' }, `nästa: ${a.nastaTitel}${a.kraverBevis ? ` (kräver ${a.kraverBevis})` : ''}`) : null;
+  }
+  const bevis = { typ: a.kraverBevis, fil: '', text: '' };
+  const skicka = (knapp, status, extra = []) => spara(knapp, 'POST', '/api/anslutning/status',
+    { system: sys, tjanst: a.tjanst, aktor: a.aktor, miljo: a.miljo, status, bevis: extra }, { vy: 'system', id: sys, flik: 'beh' });
+  const knapp = a.nasta ? el('button', { class: 'knapp', onclick: (e) => {
+    if (a.kraverBevis && !(bevis.fil || bevis.text)) return e.target.after(el('div', { class: 'meddelande nej' }, `Ange ${a.kraverBevis}.`));
+    skicka(e.target, a.nasta, a.kraverBevis ? [{ typ: a.kraverBevis, ...(bevis.fil ? { fil: bevis.fil } : {}), ...(bevis.text ? { text: bevis.text } : {}) }] : []);
+  } }, `→ ${a.nastaTitel}`) : null;
+  return el('div', {},
+    a.kraverBevis === 'testrapport' ? falt({ placeholder: 'Testrapport, t.ex. rapport/federation.md', style: 'margin-bottom:4px' }, '', (v) => { bevis.fil = v.trim(); }) : null,
+    a.kraverBevis === 'beslut' ? falt({ placeholder: 'Beslut, t.ex. Godkänd av tjänsteägaren', style: 'margin-bottom:4px' }, '', (v) => { bevis.text = v.trim(); }) : null,
+    el('div', { class: 'knapprad', style: 'margin:0' }, knapp,
+      a.status !== 'aterkallad' ? el('button', { class: 'länk liten', onclick: (e) => { if (confirm(`Återkalla ${a.titel} i ${MILJÖTITEL[a.miljo]}?`)) skicka(e.target, 'aterkallad'); } }, 'återkalla') : null));
+}
+
+function ritaBehorighet(c, a) {
+  const b = a.behorighet;
+  c.append(el('p', { class: 'svag' }, 'Vad systemet faktiskt är godkänt för, per miljö, skilt från vad det deklarerar (nuläget). ',
+    'Test: begärd → behörig → testad (kräver testrapport). Produktion: ansökt (kräver testad i test) → godkänd (kräver beslut) → ansluten. ',
+    'Scopes och nycklar gäller från behörig i test och från godkänd i produktion.'));
+  if (!b?.anslutningar.length) {
+    c.append(el('p', { class: 'tom' }, TESTLÄGE ? 'Inga anslutningar ännu. Använd Anslut fler tjänster (test).' : 'Inga anslutningar registrerade.'));
+    return;
+  }
+  c.append(el('div', { class: 'tabellram' }, el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, ['Miljö', 'Roll', 'Status', 'Bevis', 'Nästa steg'].map((h) => el('th', {}, h)))),
+    el('tbody', {}, b.anslutningar.map((x) => el('tr', {},
+      el('td', {}, miljöEl(x.miljo)),
+      el('td', {}, prick(x.tjanst), ' ', x.titel, x.informationsmangder ? el('div', { class: 'via' }, `informationsmängder: ${x.informationsmangder.join(', ')}`) : null,
+        x.fel.length ? el('div', { class: 'nej liten' }, x.fel.join('; ')) : null),
+      el('td', {}, kedjaEl(x), el('div', { class: 'via' }, x.historik?.length ? `${x.historik.at(-1).datum} · ${x.historik.at(-1).av}` : '')),
+      el('td', {}, (x.bevis || []).map((v) => el('div', { class: 'liten' }, BEVISTITEL[v.typ] || v.typ, ': ', v.fil ? el('span', { class: 'mono' }, v.fil) : v.text || '', v.datum ? el('span', { class: 'svag' }, ` · ${v.datum}`) : ''))),
+      el('td', {}, nästaSteg(a.system, x)),
+    ))))));
+  for (const [miljo, x] of Object.entries(b.miljoer)) {
+    c.append(...[el('h3', {}, miljöEl(miljo), ' Behörigheter'),
+      x.fel.length ? el('ul', {}, x.fel.map((f) => el('li', { class: 'nej' }, f))) : null,
+      el('p', {}, 'Scopes totalt: ', scopesEl(x.scopes)),
+      ritaScopes(x.behorigheter), ritaKlientCs(x.klientCs), ritaWso2(x.wso2)].filter(Boolean));
+  }
+}
+
+// Scopes per tjänsteaktör, direkt ur tjänstens IG.
+function ritaIgBehorigheter(c, id) {
+  const lista = DATA.behorigheter[id];
+  c.append(el('p', { class: 'svag' }, 'Ur varje tjänsteaktörs klientförmågor (CapabilityStatement, mode=client): vem som tar emot varje anrop och vilka scopes (SMART v2, system/Typ.cruds) rollen behöver. Det är taket för vad ett system i rollen kan få; det kan smalna av genom att välja bort informationsmängder.'));
+  for (const b of lista) {
+    c.append(...[el('h3', {}, b.titel, ' ', el('span', { class: 'svag liten mono' }, b.aktor), b.konsument ? el('span', { class: 'etikett' }, 'konsumentroll') : null),
+      b.mottagare.length ? ritaScopes([b]) : el('p', { class: 'svag' }, 'Inga klientanrop.'),
+      b.utanMottagare.length ? el('p', { class: 'nej liten' }, `Ingen mottagare för: ${b.utanMottagare.join(', ')}`) : null].filter(Boolean));
+  }
+}
+
+function anslutKlient(namn = '') { redigera({ typ: 'anslut', namn, tillbaka: { ...state } }); }
+function ritaAnslutKlient(p, r) {
+  const befintliga = STUDIO.system;
+  const KR = STUDIO.konsumentroller || {};
+  const från = (namn) => {
+    const k = befintliga.find((x) => x.system === namn);
+    return { befintligt: !!k, system: namn || '', titel: k?.titel || '', organisation: typeof k?.organisation === 'object' ? { ...k.organisation } : { namn: k?.organisation || '' }, roller: [] };
+  };
+  const u = r.utkast ||= från(r.namn);
+  const analys = SYSTEM.find((x) => x.system === u.system);
+  const testAnslutning = (t, aktor) => analys?.behorighet?.anslutningar.find((x) => x.miljo === 'test' && x.tjanst === t && x.aktor === aktor);
+  const om = () => ritaPanel();
+  const förhand = el('div', { 'aria-live': 'polite' });
+  const kropp = () => ({
+    system: u.system, titel: u.titel || u.system, organisation: u.organisation?.namn ? u.organisation : undefined,
+    roller: u.roller.map((x) => ({ tjanst: x.tjanst, aktor: x.aktor, ...(x.informationsmangder ? { informationsmangder: x.informationsmangder } : {}) })),
+  });
+  const förhandsgranska = () => {
+    clearTimeout(r.timer);
+    if (!u.roller.length) return förhand.replaceChildren(el('p', { class: 'tom' }, 'Välj minst en tjänst att konsumera.'));
+    förhand.replaceChildren(el('p', { class: 'svag' }, 'Tar fram behörigheter …'));
+    r.timer = setTimeout(async () => {
+      try {
+        const x = await api('POST', '/api/anslut/forhandsgranska', { ...kropp(), system: /^[A-Za-z][A-Za-z0-9]*$/.test(u.system) ? u.system : 'NyKlient' });
+        förhand.replaceChildren(...[
+          x.fel.length ? el('ul', {}, x.fel.map((f) => el('li', { class: 'nej' }, f))) : null,
+          el('p', {}, 'Scopes totalt: ', scopesEl(x.scopes)),
+          ritaScopes(x.behorigheter), ritaKlientCs(x.klientCs), ritaWso2(x.wso2, true)].filter(Boolean));
+      } catch (e) {
+        förhand.replaceChildren(el('div', { class: 'meddelande nej' }, e.message));
+      }
+    }, 250);
+  };
+
+  p.append(el('div', { class: 'panelhuvud' }, el('h2', {}, 'Anslut klient'), miljöEl('test')),
+    el('p', { class: 'svag' }, 'Välj system och de tjänster klienten ska konsumera. Klientens CapabilityStatement, scopes per mottagare och vad som skulle skapas i WSO2 tas fram ur tjänsternas IG:er; taket är rollens förmågor. I testmiljön blir anslutningen behörig direkt. Produktion kräver att rollen är testad och godkänd.'));
+  const g = el('div', { class: 'guide' });
+  p.append(g);
+  g.append(el('h3', {}, el('span', { class: 'nr' }, '1'), 'System'),
+    el('div', { class: 'formular' },
+      el('label', {}, 'System'), val([['', '– nytt system –'], ...befintliga.map((x) => [x.system, `${x.titel || x.system} (${x.system})`])], u.befintligt ? u.system : '',
+        (v) => { r.utkast = { ...från(v), roller: u.roller }; om(); }),
+      ...(u.befintligt ? [] : [
+        el('label', {}, 'Systemnamn'), falt({ placeholder: 'T.ex. VardappY', onchange: förhandsgranska }, u.system, (v) => { u.system = v.trim(); }),
+        el('label', {}, 'Titel'), falt({ placeholder: 'T.ex. Vårdapp Y' }, u.titel, (v) => { u.titel = v; }),
+        el('label', {}, 'Organisation'), falt({}, u.organisation.namn, (v) => { u.organisation.namn = v; }),
+        el('label', {}, 'HSA-id'), falt({ placeholder: 'SE2321000000-XXXX' }, u.organisation.hsaId, (v) => { u.organisation.hsaId = v || undefined; }),
+      ])));
+
+  g.append(el('h3', {}, el('span', { class: 'nr' }, '2'), 'Tjänster att konsumera'));
+  const tjänster = Object.values(M).filter((m) => m.ig.roll === 'tjanst' && (KR[m.ig.id] || []).length);
+  if (!tjänster.length) g.append(el('p', { class: 'tom' }, 'Inga tjänster har konsumentroller.'));
+  for (const m of tjänster) {
+    const t = m.ig.id;
+    for (const aktor of KR[t]) {
+      const vald = u.roller.find((x) => x.tjanst === t && x.aktor === aktor);
+      const finns = testAnslutning(t, aktor);
+      const mängder = m.informationsmangder || [];
+      g.append(el('div', { class: 'rollval' },
+        el('label', { class: 'kryss' }, el('input', { type: 'checkbox', checked: !!vald, onchange: (e) => {
+          if (e.target.checked) u.roller.push({ tjanst: t, aktor, informationsmangder: finns?.informationsmangder ? [...finns.informationsmangder] : null });
+          else u.roller = u.roller.filter((x) => x !== vald);
+          om();
+        } }), prick(t), ' ', el('b', {}, m.ig.titel), ' · ', m.aktorer[aktor]?.titel || aktor,
+        finns ? el('span', { class: 'status registrerad', style: 'margin-left:6px' }, `test: ${STATUSTITEL[finns.status]}`) : null),
+        vald && mängder.length ? el('div', {},
+          el('label', { class: 'liten', style: 'margin-left:24px' }, el('input', { type: 'checkbox', checked: !vald.informationsmangder, onchange: (e) => {
+            vald.informationsmangder = e.target.checked ? null : mängder.map((i) => i.nyckel);
+            om();
+          } }), ' alla informationsmängder'),
+          vald.informationsmangder ? kryss(mängder.map((i) => i.nyckel), vald.informationsmangder, (n) => mängder.find((i) => i.nyckel === n).titel, förhandsgranska) : null) : null));
+    }
+  }
+
+  g.append(el('h3', {}, el('span', { class: 'nr' }, '3'), 'Behörigheter, klientförmåga och WSO2'), förhand);
+  const knapp = el('button', { class: 'knapp primar', disabled: !u.roller.length, onclick: () => {
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(u.system)) return knapp.after(el('div', { class: 'meddelande nej' }, 'Systemnamnet ska vara bokstäver och siffror, t.ex. VardappY.'));
+    if (u.roller.some((x) => x.informationsmangder && !x.informationsmangder.length)) return knapp.after(el('div', { class: 'meddelande nej' }, 'Välj minst en informationsmängd per tjänst, eller alla.'));
+    spara(knapp, 'POST', '/api/anslut', kropp(), { vy: 'system', id: u.system, flik: 'beh' });
+  } }, 'Begär testbehörighet');
+  g.append(el('h3', {}, el('span', { class: 'nr' }, '4'), 'Begär'),
+    el('p', { class: 'svag liten' }, 'Rollerna läggs till systemet och anslutningarna i test förs begärd → behörig. Nästa steg, testad, kräver en testrapport.'),
+    el('div', { class: 'knapprad' }, knapp, el('button', { class: 'knapp', onclick: avbryt }, 'Avbryt')));
+  förhandsgranska();
+}
+
 // ------------------------------------------------------------------ start
 function rita() { ritaMatris(); ritaAlla(); ritaSystemlista(); if (STUDIO) ritaStudiorad(); ritaPanel(); }
 function start() {
@@ -1593,8 +1826,9 @@ function start() {
     ? `Saknar komposition.json: ${saknas.join(', ')}. Kör ig-composer bygg före ig-composer vy.`
     : 'Data från varje IG:s komposition.json, framtagen av ig-composer.';
   if (STUDIO) {
-    document.title = 'Kompositionsstudio';
+    document.title = TESTLÄGE ? 'Kompositionsstudio – testmiljö' : 'Kompositionsstudio';
     document.querySelector('h1').textContent = 'Kompositionsstudio';
+    if (TESTLÄGE) document.body.classList.add('testmiljo');
   }
   ritaFörklaring();
   läsHash();

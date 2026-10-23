@@ -25,3 +25,33 @@ nulage:
 tillval: []
 informationsmangder:
   inera.tjanst.npo: [VardkontaktInfo]
+# Vad systemet faktiskt är godkänt för, per miljö.
+anslutningar:
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKallsystem
+    miljo: test
+    status: testad
+    historik:
+      - { status: begard, datum: 2026-06-01, av: Region Exempel }
+      - { status: behorig, datum: 2026-06-01, av: automatiskt i testmiljön }
+      - { status: testad, datum: 2026-06-15, av: Region Exempel }
+    bevis:
+      - { typ: testrapport, fil: rapport/federation.md, datum: 2026-06-15 }
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKallsystem
+    miljo: prod
+    status: ansluten
+    historik:
+      - { status: ansokt, datum: 2026-06-16, av: Region Exempel }
+      - { status: godkand, datum: 2026-06-30, av: Tjänsteägare NPÖ }
+      - { status: ansluten, datum: 2026-07-01, av: Inera AB }
+    bevis:
+      - { typ: beslut, text: Godkänd för produktion, datum: 2026-06-30 }
+  - tjanst: inera.tjanst.npo
+    aktor: NPOKonsument
+    miljo: test
+    status: behorig
+    informationsmangder: [VardkontaktInfo]
+    historik:
+      - { status: begard, datum: 2026-10-20, av: Region Exempel }
+      - { status: behorig, datum: 2026-10-20, av: automatiskt i testmiljön }
