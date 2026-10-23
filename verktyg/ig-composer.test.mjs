@@ -19,6 +19,8 @@ import { behorigheterForRoll, behorigheterForSystem, klientCapabilityStatement, 
 import { overga, nastaStatus } from './anslutning.mjs';
 import { wso2Plan } from './wso2.mjs';
 import { forhandsgranskaAnslutning, forhandsgranskaProducentAnslutning, anslutProducentTest, bytProducentAdress } from './studio.mjs';
+import { publicera, webbsokvag } from './publicera.mjs';
+import { spawnSync } from 'node:child_process';
 import { referensroller, startaReferens, testaReferens, renderProdukttest } from './produkttest.mjs';
 import { loadProdukter, skrivProdukt, skrivProduktGodkannande, registreraOrganisation, organisationer } from './systemregister.mjs';
 
@@ -911,4 +913,38 @@ test('federationstest mot produktens referensimplementation: live-adress, produc
   const borta = await testaReferens({ ws: w, manifests, root, regler, produkt, adress: 'http://127.0.0.1:9/fhir', roller });
   assert.equal(borta.status, 'ej nåbar');
   assert.equal(borta.nabar, false);
+});
+
+// ---------------------------------------------------------------- publicering
+
+test('publicera: webbrot per kanonisk URL, versioner behålls, paket och paketflöde', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'publicera-'));
+  try {
+    const svod = loadWorkspace(root).get('inera.fed.svod');
+    const igDir = path.join(tmp, 'svod');
+    fs.cpSync(path.join(svod.dir, 'fsh-generated'), path.join(igDir, 'fsh-generated'), { recursive: true });
+    const ig = { ...svod, dir: igDir };
+    const ut = path.join(tmp, 'webb');
+    const r1 = publicera({ igs: [ig], ut, datum: '2026-10-01' });
+    assert.deepEqual(r1.varningar, []);
+    assert.equal(r1.resultat[0].sokvag, 'ig/svod');
+    assert.equal(r1.resultat[0].kalla, 'sushi');
+    for (const f of ['ig/svod/StructureDefinition-svod-vardenhet.json', 'ig/svod/StructureDefinition-svod-vardenhet.html', 'ig/svod/0.1.0/StructureDefinition-svod-vardenhet.json', 'ig/svod/package.tgz', 'ig/svod/index.html', 'package-feed.xml', 'index.html']) {
+      assert.ok(fs.existsSync(path.join(ut, f)), f);
+    }
+    const lista = spawnSync('tar', ['-tzf', path.join(ut, 'ig/svod/package.tgz')], { encoding: 'utf8' }).stdout;
+    assert.match(lista, /package\/package\.json/);
+    // Nästa version: den förra ligger kvar och båda finns i package-list och flödet.
+    publicera({ igs: [{ ...ig, version: '0.2.0' }], ut, datum: '2026-11-01' });
+    assert.ok(fs.existsSync(path.join(ut, 'ig/svod/0.1.0/StructureDefinition-svod-vardenhet.json')));
+    assert.ok(fs.existsSync(path.join(ut, 'ig/svod/0.2.0/package.tgz')));
+    const pl = JSON.parse(fs.readFileSync(path.join(ut, 'ig/svod/package-list.json'), 'utf8'));
+    assert.deepEqual(pl.list.map((v) => [v.version, v.current]), [['current', true], ['0.2.0', true], ['0.1.0', false]]);
+    const flode = fs.readFileSync(path.join(ut, 'package-feed.xml'), 'utf8');
+    assert.match(flode, /inera\.fed\.svod#0\.2\.0/);
+    assert.match(flode, /inera\.fed\.svod#0\.1\.0/);
+    assert.equal(webbsokvag('https://example.org/ig/x', 'https://fhir.inera.se').varning, 'https://example.org/ig/x ligger inte under https://fhir.inera.se');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

@@ -31,3 +31,6 @@ federation.json
 federation-*.json
 produkttest-*.json
 **/Requirements-fromNarrative.json
+
+# Webbroten från ig-composer publicera
+publicerat/

@@ -2,6 +2,8 @@
 #   Studion            http://localhost:4900/
 #   Studion, testmiljö  http://localhost:4901/  (Anslut klient (test))
 #   Definitionsregister http://localhost:8080/fhir (HAPI FHIR R5)
+#   Publicerat          http://localhost:8081/ (som fhir.inera.se: webbrot + innehållsförhandling)
+# Bygg webbroten först: docker compose exec studio node verktyg/ig-composer.mjs publicera
 # Publicera definitionerna i registret:
 #   docker compose exec studio node verktyg/ig-composer.mjs register publicera
 # Samma filer används av devcontainern (Codespaces eller VS Code Dev Containers).
@@ -37,6 +39,18 @@ services:
       - until [ -d verktyg/node_modules/yaml ]; do sleep 5; done; exec node verktyg/ig-composer.mjs studio --miljo test --port 4901
     depends_on:
       - studio
+
+  # Webbroten från ig-composer publicera, som på fhir.inera.se: kanoniska URL:er
+  # ger HTML, JSON eller XML efter Accept, och /fhir/ går till registret.
+  webb:
+    image: nginx:1.27-alpine
+    ports:
+      - "8081:80"
+    volumes:
+      - ./webb/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./publicerat:/usr/share/nginx/html:ro
+    depends_on:
+      - register
 
   register:
     image: hapiproject/hapi:v8.12.0-2

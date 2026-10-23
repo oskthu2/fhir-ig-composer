@@ -51,6 +51,7 @@ import { startaStudio } from './studio.mjs';
 import { behorighetFor, behorigheterForRoll, arKonsumentroll } from './behorighet.mjs';
 import { KEDJA, STATUS_TITEL } from './anslutning.mjs';
 import { loadProdukter } from './systemregister.mjs';
+import { publicera } from './publicera.mjs';
 import { referensroller, startaReferens, testaReferens, skrivProdukttest, lasProdukttester } from './produkttest.mjs';
 import { registerUrl, publiceraRegister, listaRegister, scenarioFranRegister } from './register.mjs';
 import { lasMiljo, adapterMiljo, systemFranKatalog, jamforSpecifikationer, hamtaExterna } from './infopeak.mjs';
@@ -1272,6 +1273,15 @@ function main(argv) {
     return status;
   }
   if (cmd === 'uppdatera') return uppdatera(root, args.includes('--bygg'));
+  if (cmd === 'publicera') {
+    const ut = path.resolve(root, (args.includes('--ut') ? args[args.indexOf('--ut') + 1] : null) || 'publicerat');
+    const bas = (args.includes('--bas') ? args[args.indexOf('--bas') + 1] : null) || 'https://fhir.inera.se';
+    const { resultat, varningar } = publicera({ igs: buildOrder(ws), ut, bas });
+    for (const r of resultat) console.log(`${r.id}#${r.version} → /${r.sokvag}/ (${r.kalla === 'publisher' ? 'IG Publisher' : 'SUSHI'}; versioner ${r.versioner.join(', ')})`);
+    for (const v of varningar) console.warn(`varning: ${v}`);
+    console.log(`Webbrot i ${path.relative(root, ut) || '.'}: ${resultat.length} IG:ar, package-feed.xml och index.html. Servera med docker compose up webb.`);
+    return 0;
+  }
   if (['anslutning', 'scopes', 'klient', 'wso2'].includes(cmd)) {
     const manifests = loadManifests(ws);
     const miljoFlagga = args.indexOf('--miljo');
@@ -1494,7 +1504,7 @@ function main(argv) {
     }
     return status;
   }
-  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | anslutning [system] | scopes <system|tjänst> [aktör] [--miljo test|prod] | klient|wso2 [system] [--miljo test|prod] | studio [--port N] [--miljo test] | uppdatera [--bygg] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
+  console.log('Användning: ig-composer komponera|efterbehandla|installera <ig-katalog> | bygg | matris | vy | system [namn] | anslutning [system] | scopes <system|tjänst> [aktör] [--miljo test|prod] | klient|wso2 [system] [--miljo test|prod] | studio [--port N] [--miljo test] | uppdatera [--bygg] | publicera [--ut publicerat] [--bas https://fhir.inera.se] | federation testa|starta [--port N] [--arbetsyta <katalog>]');
   return cmd ? 1 : 0;
 }
 

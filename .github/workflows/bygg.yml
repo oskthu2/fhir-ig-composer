@@ -80,6 +80,22 @@ jobs:
       - name: Interaktiv matrisvy
         run: node verktyg/ig-composer.mjs vy
 
+      - name: Webbrot för fhir.inera.se
+        run: node verktyg/ig-composer.mjs publicera --ut publicerat
+
+      - name: Prova innehållsförhandlingen (nginx)
+        run: |
+          docker run -d --name webb -p 8081:80 \
+            -v "$PWD/webb/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/publicerat:/usr/share/nginx/html:ro" nginx:1.27-alpine
+          for i in $(seq 1 20); do curl -sf -o /dev/null http://localhost:8081/ && break; sleep 1; done
+          sh webb/prova.sh http://localhost:8081
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webbrot
+          path: publicerat/
+
       - uses: actions/upload-artifact@v4
         with:
           name: matrisvy

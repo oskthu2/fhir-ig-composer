@@ -7,7 +7,8 @@
   "service": "studio",
   "runServices": [
     "studio",
-    "register"
+    "register",
+    "webb"
   ],
   "workspaceFolder": "/arbetsyta",
   "shutdownAction": "stopCompose",
@@ -23,7 +24,8 @@
     4900,
     4901,
     4800,
-    8080
+    8080,
+    8081
   ],
   "portsAttributes": {
     "4900": {
@@ -38,6 +40,9 @@
     },
     "8080": {
       "label": "Definitionsregister (HAPI R5)"
+    },
+    "8081": {
+      "label": "Publicerat (som fhir.inera.se)"
     }
   },
   "customizations": {

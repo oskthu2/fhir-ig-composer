@@ -34,7 +34,7 @@ Patientöversikt (T2) motsvarar referensrealiseringen av RIVTA T2 på infopeak o
 |---|---|---|
 | **Bara titta** | Vyn (`vy.html`), utan redigering | Actions → *Bygg och testa* → senaste körningen → artefakten **matrisvy** → öppna `vy.html` |
 | **Codespaces** | Studion, mocken och definitionsregistret i webbläsaren, inget att installera | *Code* → *Codespaces* → *Create codespace*. Studion öppnas på port 4900 när bygget är klart; studion i testmiljöläge finns på port 4901. |
-| **Docker lokalt** | Samma sak på din dator; behövs mot interna testmiljöer | `docker compose up` → http://localhost:4900/ (studio), http://localhost:4901/ (studio, testmiljö) och http://localhost:8080/fhir (register) |
+| **Docker lokalt** | Samma sak på din dator; behövs mot interna testmiljöer | `docker compose up` → http://localhost:4900/ (studio), http://localhost:4901/ (studio, testmiljö), http://localhost:8080/fhir (register) och http://localhost:8081/ (publicerat) |
 | **Node lokalt** | Allt utom registret | Node ≥ 20 och `npm i -g fsh-sushi@3`, sedan kommandona under *Bygga* och `node verktyg/ig-composer.mjs studio` |
 
 **Uppdatera till senaste versionen** (i codespacets terminal):
@@ -419,6 +419,27 @@ Ett flöde skrivs en gång i skissformatet (för hand eller i studion) och kompi
 
 `PlanDefinition` med `type = workflow-definition` är FHIR:s resurs för fördefinierade arbetsflöden: vilka åtgärder som görs, av vem, i vilken ordning och med vilken information. `ExampleScenario` beskriver interaktionerna mellan system med `operation`, initiator och mottagare. Kraven ligger i `Requirements`, rollerna i `ActorDefinition` och API:erna i `CapabilityStatement`.
 
+## Publicering: kanoniska URL:er som webbsida och API
+
+GitHub Pages kan inte välja svar efter `Accept` eller svara med `application/fhir+json`, så kanoniska URL:er fungerar inte som API där. Publiceringen består därför av tre delar:
+
+| Del | Verktyg | Vad det ger |
+|---|---|---|
+| Webbrot | `ig-composer publicera` | `/ig/<namn>/` (aktuell version), `/ig/<namn>/<version>/`, `package-list.json`, `package.tgz` per version, `package-feed.xml` (paketflöde för paketregister) och en startsida. Innehållet tas från IG Publishers utdata (`output/`), annars från SUSHI:s: resurserna som JSON med en enkel sida per resurs. Tidigare versioner i webbroten behålls. |
+| Innehållsförhandling | nginx (`webb/nginx.conf`) | En kanonisk URL `/ig/<namn>/[<version>/]<Typ>/<id>` ger HTML till en webbläsare (302 till IG-sidan, så att sidans länkar fungerar), JSON med `application/fhir+json` och XML med `application/fhir+xml`. `?_format=json\|xml\|html` går före `Accept`. |
+| Sökbart API | Definitionsregistret (HAPI) | `/fhir/` skickas till registret: `GET /fhir/StructureDefinition?url=…&version=…` |
+
+```sh
+node verktyg/ig-composer.mjs publicera                   # → publicerat/
+docker compose up webb register                          # http://localhost:8081/
+curl -H 'Accept: application/fhir+json' http://localhost:8081/ig/npo/StructureDefinition/vardkontakt-npo
+sh webb/prova.sh http://localhost:8081                   # provar innehållsförhandlingen
+```
+
+Konfigurationen är generell, eftersom alla kanoniska URL:er följer `https://fhir.inera.se/ig/<namn>`; `publicera` varnar för en IG som inte gör det. CI bygger webbroten, provar innehållsförhandlingen med nginx och laddar upp webbroten som byggartefakten **webbrot**. Driftsättningen på `fhir.inera.se` är ett eget steg: samma nginx-konfiguration, webbroten och registret.
+
+XML finns bara när IG Publisher har byggt IG:n. För webbsidor med fullständigt innehåll (profiltabeller, flödesdiagram och sidorna) körs IG Publisher på IG:arna före `publicera`.
+
 ## Definitionsregister: IG:arnas definitioner som API
 
 ```sh
@@ -485,6 +506,7 @@ Valet ligger i adressens `#`-del, så en länk till en vy går att dela.
 ├── externa/                   ögonblicksbilder av externa specifikationer (CC0)
 ├── verktyg/                   ig-composer (Node ≥ 20): komposition, studio, mock, läsadapter, register, Mermaid
 ├── .devcontainer/             Codespaces och VS Code Dev Containers
+├── webb/                      nginx-konfiguration för den publicerade webbroten (innehållsförhandling)
 ├── Dockerfile                 studion i en container
 └── docker-compose.yml         studio, studio i testmiljöläge + definitionsregister (HAPI FHIR R5)
 ```
