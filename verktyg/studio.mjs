@@ -31,6 +31,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { loadSystems } from './system.mjs';
 import { overga } from './anslutning.mjs';
@@ -410,9 +412,20 @@ export function skrivTillampning(ws, igId, b, root) {
 
 // ---- server
 
+// Ett fingeravtryck av verktygets moduler. Mallen läses vid varje sidvisning
+// men modulerna bara när studion startar; efter en git pull utan omstart
+// visar studion då ny sida med gammal serverkod.
+const VERKTYG = path.dirname(fileURLToPath(import.meta.url));
+const kodensAvtryck = () => {
+  const h = crypto.createHash('sha256');
+  for (const f of fs.readdirSync(VERKTYG).filter((x) => x.endsWith('.mjs')).sort()) h.update(f).update(fs.readFileSync(path.join(VERKTYG, f)));
+  return h.digest('hex');
+};
+
 export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', miljo = null, verktyg }) {
   const { loadWorkspace, viewData, renderView, komponeraAlla, bygg, loadManifests } = verktyg;
   if (miljo && miljo !== 'test') throw new Error(`Studion har bara testmiljöläge (--miljo test), inte ${miljo}`);
+  const avtryck = kodensAvtryck();
   const sida = () => {
     const ws = loadWorkspace(root);
     const data = viewData(ws, root);
@@ -420,6 +433,7 @@ export async function startaStudio({ root, port = 4900, vard = '127.0.0.1', milj
       miljo, skisser: skisser(ws, root), konfiguration: konfiguration(ws), andringar: andringar(root), system: loadSystems(root),
       konsumentroller: konsumentroller(data.manifest), producentroller: producentroller(data.manifest),
       produkter: loadProdukter(root).map(({ fil, ...p }) => p), organisationer: organisationer(root),
+      inaktuell: kodensAvtryck() !== avtryck,
     };
     return renderView(data);
   };

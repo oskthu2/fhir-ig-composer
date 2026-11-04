@@ -1372,7 +1372,11 @@ function ritaStudiorad() {
   let senaste = null;
   try { senaste = JSON.parse(sessionStorage.getItem(SENASTE) || 'null'); } catch { senaste = null; }
   const ä = STUDIO.andringar;
-  s.replaceChildren(
+  // Studion kör äldre serverkod än sidan: efter en uppdatering utan omstart.
+  const inaktuell = STUDIO.inaktuell || STUDIO.producentroller === undefined;
+  s.replaceChildren(...[
+    inaktuell ? el('div', { class: 'meddelande nej' }, 'Verktyget har uppdaterats sedan studion startade, och alla funktioner fungerar inte förrän den startats om. Kör ',
+      el('code', {}, 'npm run uppdatera'), ' i terminalen och ladda sedan om sidan.') : null,
     TESTLÄGE ? el('div', { class: 'testband' }, miljöEl('test'), 'Testmiljöläge',
       el('span', { class: 'svag liten' }, 'Här ansluts klienter till testmiljön. IG:ar, flöden och system redigeras inte, och WSO2 körs som torrkörning.')) : el('h3', {}, 'Studio'),
     TESTLÄGE ? el('div', { class: 'knapprad' },
@@ -1404,7 +1408,7 @@ function ritaStudiorad() {
       try { const r = await api('POST', '/api/bygg'); k.after(el('details', { open: true }, el('summary', {}, `Bygget avslutades med kod ${r.status}`), el('pre', { class: 'yaml' }, r.logg))); } catch (err) { k.after(el('div', { class: 'meddelande nej' }, err.message)); }
       k.disabled = false; k.textContent = 'Bygg med SUSHI (exempel, sidor, diagram)';
     } }, 'Bygg med SUSHI (exempel, sidor, diagram)'), el('span', { class: 'svag liten' }, 'Behövs för IG-sidorna, Mermaid-diagrammen och exemplen i den mockade federationen.')) : null,
-  );
+  ].filter(Boolean));
 }
 
 // ---- system
@@ -2157,6 +2161,10 @@ function ritaAnslutProducent(p, r) {
   systemSteg(g, r, u, () => { if (!u.adress && u.andpunkter?.length) u.adress = u.andpunkter[0]; om(); }, förhandsgranska);
 
   g.append(el('h3', {}, el('span', { class: 'nr' }, '2'), 'Tjänster och informationsmängder'));
+  if (!STUDIO.producentroller) {
+    g.append(el('div', { class: 'meddelande nej' }, 'Studion kör en äldre version av verktyget och skickar inga producentroller. Kör ',
+      el('code', {}, 'npm run uppdatera'), ' i terminalen och ladda om sidan.'));
+  }
   for (const m of Object.values(M).filter((x) => x.ig.roll === 'tjanst' && (PR[x.ig.id] || []).length)) {
     const t = m.ig.id;
     for (const pr of PR[t]) {
